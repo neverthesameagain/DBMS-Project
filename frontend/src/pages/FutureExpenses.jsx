@@ -1,72 +1,81 @@
 import { useState, useEffect } from 'react';
 import api from '../lib/api';
 import { useAuth } from '../context/AuthContext';
-import { Loader2, Calendar, CheckCircle, XCircle } from 'lucide-react';
+import { Loader2, Calendar, CheckCircle, Trash2 } from 'lucide-react';
+
+const CATEGORIES = ['General', 'Food', 'Travel', 'Entertainment', 'Shopping', 'Insurance', 'Health', 'Utilities', 'Other'];
 
 const FutureExpenses = () => {
     const { user } = useAuth();
     const [expenses, setExpenses] = useState([]);
-    const [categories, setCategories] = useState([]);
     const [loading, setLoading] = useState(true);
 
-    // Form Link
+    // Form state
+    const [title, setTitle] = useState('');
     const [amount, setAmount] = useState('');
-    const [date, setDate] = useState('');
-    const [categoryId, setCategoryId] = useState('');
-
-    useEffect(() => {
-        if (user) {
-            fetchData();
-        }
-    }, [user]);
+    const [dueDate, setDueDate] = useState('');
+    const [category, setCategory] = useState('General');
+    const [submitting, setSubmitting] = useState(false);
 
     const fetchData = async () => {
         try {
-            const [expRes, catRes] = await Promise.all([
-                api.get(`/api/future/${user.user_id}`),
-                api.get('/api/budget/categories')
-            ]);
-            setExpenses(expRes.data);
-            setCategories(catRes.data);
+            const res = await api.get('/api/future-expenses');
+            setExpenses(res.data);
         } catch (err) {
-            console.error(err);
+            console.error('Failed to load future expenses', err);
         } finally {
             setLoading(false);
         }
     };
 
+    useEffect(() => {
+        if (user) fetchData();
+    }, [user]);
+
     const handleAdd = async (e) => {
         e.preventDefault();
+        setSubmitting(true);
         try {
-            await api.post('/api/future/add', {
-                user_id: user.user_id,
-                category_id: categoryId,
+            await api.post('/api/future-expenses', {
+                title,
                 estimated_amount: parseFloat(amount),
-                expected_date: date
+                due_date: dueDate || null,
+                category,
             });
-            alert('Future expense planned!');
+            setTitle('');
             setAmount('');
-            setDate('');
-            setCategoryId('');
+            setDueDate('');
+            setCategory('General');
             fetchData();
         } catch (err) {
-            alert('Failed to add expense');
+            alert('Failed to add: ' + (err.response?.data?.error || err.message));
+        } finally {
+            setSubmitting(false);
         }
     };
 
-    const handleStatus = async (id, status) => {
+    const handleComplete = async (id) => {
         try {
-            await api.post('/api/future/update-status', {
-                future_expense_id: id,
-                status
-            });
+            await api.patch(`/api/future-expenses/${id}`, { is_completed: true });
             fetchData();
         } catch (err) {
-            alert('Failed to update status');
+            alert('Failed to update');
+        }
+    };
+
+    const handleDelete = async (id) => {
+        try {
+            await api.delete(`/api/future-expenses/${id}`);
+            fetchData();
+        } catch (err) {
+            alert('Failed to delete');
         }
     };
 
     if (loading) return <div className="flex justify-center p-12"><Loader2 className="animate-spin" /></div>;
+
+    const pending = expenses.filter(e => !e.is_completed);
+    const done = expenses.filter(e => e.is_completed);
 
     return (
         <div className="max-w-4xl mx-auto space-y-6">
@@ -77,58 +86,88 @@ const FutureExpenses = () => {
             {/* Form */}
             <div className="card bg-indigo-50 border-indigo-100">
                 <h3 className="font-bold mb-4">Plan New Expense</h3>
-                <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+                    <div className="md:col-span-2">
+                        <label className="block text-sm font-medium mb-1">Title</label>
+                        <input type="text" className="input" placeholder="e.g. Car Insurance" value={title} onChange={e => setTitle(e.target.value)} required />
+                    </div>
                     <div>
                         <label className="block text-sm font-medium mb-1">Category</label>
-                        <select className="input" value={categoryId} onChange={e => setCategoryId(e.target.value)} required>
-                            <option value="">Select...</option>
-                            {categories.map(c => <option key={c.category_id} value={c.category_id}>{c.category_name}</option>)}
+                        <select className="input" value={category} onChange={e => setCategory(e.target.value)}>
+                            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
                     </div>
                     <div>
-                        <label className="block text-sm font-medium mb-1">Estimated Amount</label>
+                        <label className="block text-sm font-medium mb-1">Amount (₹)</label>
                         <input type="number" className="input" value={amount} onChange={e => setAmount(e.target.value)} required />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium mb-1">Expected Date</label>
-                        <input type="date" className="input" value={date} onChange={e => setDate(e.target.value)} required />
+                        <label className="block text-sm font-medium mb-1">Due Date</label>
+                        <input type="date" className="input" value={dueDate} onChange={e => setDueDate(e.target.value)} />
                     </div>
-                    <button type="submit" className="btn btn-primary">Plan It</button>
+                    <button type="submit" className="btn btn-primary md:col-span-5" disabled={submitting}>
+                        {submitting ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Plan It'}
+                    </button>
                 </form>
             </div>
 
-            {/* List */}
-            <div className="grid gap-4">
-                {expenses.map(exp => (
-                    <div key={exp.future_expense_id} className="card flex justify-between items-center">
-                        <div>
-                            <div className="flex items-center gap-3">
-                                <h4 className="font-bold">{exp.category_name}</h4>
-                                <span className={`px-2 py-0.5 rounded text-xs font-bold ${exp.status === 'PAID' ? 'bg-green-100 text-green-700' :
-                                        exp.status === 'CANCELLED' ? 'bg-red-100 text-red-700' :
-                                            'bg-yellow-100 text-yellow-700'
-                                    }`}>{exp.status}</span>
-                            </div>
-                            <p className="text-sm text-gray-500">Expected: {new Date(exp.expected_date).toLocaleDateString()}</p>
-                        </div>
-                        <div className="flex items-center gap-4">
-                            <span className="font-bold text-lg">₹{exp.estimated_amount}</span>
-                            {exp.status === 'PLANNED' && (
-                                <div className="flex gap-2">
-                                    <button onClick={() => handleStatus(exp.future_expense_id, 'PAID')} className="p-2 bg-green-50 text-green-600 rounded hover:bg-green-100" title="Mark Paid">
+            {/* Pending */}
+            {pending.length > 0 && (
+                <div>
+                    <h3 className="font-semibold text-gray-700 mb-3">Upcoming</h3>
+                    <div className="grid gap-3">
+                        {pending.map(exp => (
+                            <div key={exp.future_id} className="card flex justify-between items-center">
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <h4 className="font-bold">{exp.title}</h4>
+                                        <span className="px-2 py-0.5 rounded text-xs font-bold bg-yellow-100 text-yellow-700">{exp.category}</span>
+                                    </div>
+                                    <p className="text-sm text-gray-500">
+                                        {exp.due_date ? `Due: ${new Date(exp.due_date).toLocaleDateString()}` : 'No due date'}
+                                    </p>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <span className="font-bold text-lg">₹{exp.estimated_amount}</span>
+                                    <button onClick={() => handleComplete(exp.future_id)} className="p-2 bg-green-50 text-green-600 rounded hover:bg-green-100" title="Mark Done">
                                         <CheckCircle className="w-5 h-5" />
                                     </button>
-                                    <button onClick={() => handleStatus(exp.future_expense_id, 'CANCELLED')} className="p-2 bg-red-50 text-red-600 rounded hover:bg-red-100" title="Cancel">
-                                        <XCircle className="w-5 h-5" />
+                                    <button onClick={() => handleDelete(exp.future_id)} className="p-2 bg-red-50 text-red-600 rounded hover:bg-red-100" title="Delete">
+                                        <Trash2 className="w-5 h-5" />
                                     </button>
                                 </div>
-                            )}
-                        </div>
+                            </div>
+                        ))}
                     </div>
-                ))}
+                </div>
+            )}
 
-                {expenses.length === 0 && <p className="text-center text-gray-500 py-8">No planned expenses.</p>}
-            </div>
+            {/* Completed */}
+            {done.length > 0 && (
+                <div>
+                    <h3 className="font-semibold text-gray-500 mb-3">Completed</h3>
+                    <div className="grid gap-3">
+                        {done.map(exp => (
+                            <div key={exp.future_id} className="card opacity-60 flex justify-between items-center">
+                                <div>
+                                    <h4 className="font-bold line-through">{exp.title}</h4>
+                                    <p className="text-sm text-gray-500">{exp.category}</p>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <span className="font-bold text-lg">₹{exp.estimated_amount}</span>
+                                    <button onClick={() => handleDelete(exp.future_id)} className="p-2 bg-red-50 text-red-600 rounded hover:bg-red-100" title="Delete">
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {expenses.length === 0 && (
+                <p className="text-center text-gray-500 py-8">No planned expenses. Add one above!</p>
+            )}
         </div>
     );
 };

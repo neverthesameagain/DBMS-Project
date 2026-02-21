@@ -1,0 +1,54 @@
+# =============================================================
+# Splitzy Pay — .gitignore
+# =============================================================
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# --- Virtual environments ---
+venv/
+.venv/
+env/
+.env/
+
+# --- Environment files (secrets!) ---
+backend/.env
+.env
+*.env
+
+# --- Flask / SQLite dev DB ---
+backend/*.db
+backend/instance/
+
+# --- Flask-Migrate (generated, reproducible) ---
+# migrations/       # uncomment if you want to exclude migrations too
+
+# --- Node / Frontend ---
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# --- macOS ---
+.DS_Store
+.AppleDouble
+
+# --- IDE ---
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# --- Database folder (SQL source files, not for git) ---
+database/
+
+# --- Logs ---
+*.log
+npm-debug.log*

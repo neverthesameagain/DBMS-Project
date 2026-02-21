@@ -1,59 +1,48 @@
 import { useState, useEffect } from 'react';
 import api from '../lib/api';
 import { useAuth } from '../context/AuthContext';
-import { Send, Loader2 } from 'lucide-react';
+import { Send, Loader2, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
 
 const Payments = () => {
     const { user } = useAuth();
-    const [targetUsers, setTargetUsers] = useState([]);
-    const [selectedUser, setSelectedUser] = useState('');
+    const [toEmail, setToEmail] = useState('');
     const [amount, setAmount] = useState('');
+    const [note, setNote] = useState('');
     const [loading, setLoading] = useState(false);
-    const [fetching, setFetching] = useState(true);
+    const [history, setHistory] = useState([]);
+    const [historyLoading, setHistoryLoading] = useState(true);
+
+    const fetchHistory = async () => {
+        try {
+            const res = await api.get('/api/payments');
+            setHistory(res.data);
+        } catch (err) {
+            console.error('Failed to load payment history', err);
+        } finally {
+            setHistoryLoading(false);
+        }
+    };
 
     useEffect(() => {
-        const fetchUsers = async () => {
-            try {
-                const res = await api.get('/api/users/');
-                // Filter out self
-                setTargetUsers(res.data.filter(u => u.user_id !== user.user_id));
-            } catch (err) {
-                console.error(err);
-            } finally {
-                setFetching(false);
-            }
-        };
-        fetchUsers();
+        if (user) fetchHistory();
     }, [user]);
 
     const handlePayment = async (e) => {
         e.preventDefault();
-        if (!amount || !selectedUser) return;
+        if (!amount || !toEmail) return;
 
         setLoading(true);
         try {
-            // 1. Initiate
-            const initRes = await api.post('/api/payment/initiate', {
+            await api.post('/api/payments', {
+                to_email: toEmail,
                 amount: parseFloat(amount),
-                to_user_id: selectedUser,
-                current_user_id: user.user_id
-                // In real app we get Razorpay Order ID here
+                note,
             });
-
-            // 2. Confirm (Simulating Success)
-            await api.post('/api/payment/confirm', {
-                from_user: user.user_id,
-                to_user: selectedUser,
-                amount: parseFloat(amount),
-                payment_type: 'PERSONAL',
-                razorpay_order_id: initRes.data.razorpay_order_id,
-                razorpay_payment_id: 'pay_mock_' + Date.now(), // Mock ID
-                category_id: null // Or 'Others'
-            });
-
-            alert('Payment Successful!');
+            alert('Payment sent successfully!');
             setAmount('');
-            setSelectedUser('');
+            setToEmail('');
+            setNote('');
+            fetchHistory();
         } catch (err) {
             alert('Payment Failed: ' + (err.response?.data?.error || err.message));
         } finally {
@@ -66,22 +55,17 @@ const Payments = () => {
             <h2 className="text-2xl font-bold text-gray-900">Make a Payment</h2>
 
             <div className="card">
-                <form onSubmit={handlePayment} className="space-y-6">
+                <form onSubmit={handlePayment} className="space-y-4">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Select Payee</label>
-                        <select
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Recipient Email</label>
+                        <input
+                            type="email"
                             className="input"
-                            value={selectedUser}
-                            onChange={(e) => setSelectedUser(e.target.value)}
+                            placeholder="friend@example.com"
+                            value={toEmail}
+                            onChange={e => setToEmail(e.target.value)}
                             required
-                        >
-                            <option value="">-- Choose User --</option>
-                            {!fetching && targetUsers.map(u => (
-                                <option key={u.user_id} value={u.user_id}>
-                                    {u.first_name} {u.last_name} ({u.email})
-                                </option>
-                            ))}
-                        </select>
+                        />
                     </div>
 
                     <div>
@@ -93,11 +77,22 @@ const Payments = () => {
                                 className="input pl-7"
                                 placeholder="0.00"
                                 value={amount}
-                                onChange={(e) => setAmount(e.target.value)}
+                                onChange={e => setAmount(e.target.value)}
                                 required
                                 min="1"
                             />
                         </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Note (optional)</label>
+                        <input
+                            type="text"
+                            className="input"
+                            placeholder="Dinner, rent, etc."
+                            value={note}
+                            onChange={e => setNote(e.target.value)}
+                        />
                     </div>
 
                     <button
@@ -113,6 +108,41 @@ const Payments = () => {
 
             <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 text-sm text-blue-800">
                 Note: Use this to settle debts or make direct transfers. For group expenses, go to the Group page.
+            </div>
+
+            {/* Payment History */}
+            <div className="card">
+                <h3 className="font-bold text-gray-900 mb-4">Payment History</h3>
+                {historyLoading ? (
+                    <div className="flex justify-center py-6"><Loader2 className="animate-spin text-primary" /></div>
+                ) : history.length === 0 ? (
+                    <p className="text-gray-500 text-sm italic text-center py-4">No payments yet.</p>
+                ) : (
+                    <div className="space-y-3 max-h-72 overflow-y-auto">
+                        {history.map(p => (
+                            <div key={p.payment_id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg text-sm">
+                                <div className="flex items-center gap-3">
+                                    {p.direction === 'sent'
+                                        ? <ArrowUpRight className="w-4 h-4 text-red-500" />
+                                        : <ArrowDownLeft className="w-4 h-4 text-green-500" />
+                                    }
+                                    <div>
+                                        <p className="font-medium text-gray-900">
+                                            {p.direction === 'sent' ? `To ${p.to_name}` : `From ${p.from_name}`}
+                                        </p>
+                                        <p className="text-xs text-gray-500">{p.note || '—'}</p>
+                                    </div>
+                                </div>
+                                <div className="text-right">
+                                    <p className={`font-bold ${p.direction === 'sent' ? 'text-red-600' : 'text-green-600'}`}>
+                                        {p.direction === 'sent' ? '-' : '+'}₹{p.amount}
+                                    </p>
+                                    <p className="text-xs text-gray-400">{new Date(p.created_at).toLocaleDateString()}</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
         </div>
     );

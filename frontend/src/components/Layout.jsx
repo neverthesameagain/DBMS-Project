@@ -12,7 +12,7 @@ const Layout = ({ children }) => {
     const navItems = [
         { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
         { icon: Users, label: 'Groups', path: '/groups' },
-        { icon: PieChartIcon, label: 'Analytics', path: '/analytics' },
+        { icon: PieChart, label: 'Analytics', path: '/analytics' },
         { icon: Wallet, label: 'Payments', path: '/payments' },
     ];
 

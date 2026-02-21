@@ -10,15 +10,17 @@ const Groups = () => {
     const [loading, setLoading] = useState(true);
     const [showCreate, setShowCreate] = useState(false);
     const [newGroupName, setNewGroupName] = useState('');
+    const [creating, setCreating] = useState(false);
 
     const fetchGroups = async () => {
-        // Mock data for frontend only
-        const mockGroups = [
-            { group_id: 1, group_name: "Goa Trip 2026", role: "Admin", joined_at: new Date().toISOString() },
-            { group_id: 2, group_name: "Room Expenses", role: "Member", joined_at: new Date().toISOString() }
-        ];
-        setGroups(mockGroups);
-        setLoading(false);
+        try {
+            const res = await api.get('/api/groups');
+            setGroups(res.data);
+        } catch (err) {
+            console.error('Failed to fetch groups:', err);
+        } finally {
+            setLoading(false);
+        }
     };
 
     useEffect(() => {
@@ -28,17 +30,16 @@ const Groups = () => {
     const handleCreateGroup = async (e) => {
         e.preventDefault();
         if (!newGroupName.trim()) return;
-
+        setCreating(true);
         try {
-            await api.post('/api/groups/create', {
-                user_id: user.user_id,
-                group_name: newGroupName
-            });
+            await api.post('/api/groups/create', { group_name: newGroupName });
             setNewGroupName('');
             setShowCreate(false);
             fetchGroups();
         } catch (err) {
-            alert("Failed to create group");
+            alert('Failed to create group: ' + (err.response?.data?.error || err.message));
+        } finally {
+            setCreating(false);
         }
     };
 
@@ -64,7 +65,9 @@ const Groups = () => {
                             value={newGroupName}
                             onChange={(e) => setNewGroupName(e.target.value)}
                         />
-                        <button type="submit" className="btn btn-primary">Create</button>
+                        <button type="submit" className="btn btn-primary" disabled={creating}>
+                            {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Create'}
+                        </button>
                     </form>
                 </div>
             )}
@@ -78,7 +81,9 @@ const Groups = () => {
                             </div>
                             <div>
                                 <h3 className="font-bold text-gray-900">{group.group_name}</h3>
-                                <p className="text-sm text-gray-500">Joined {new Date(group.joined_at).toLocaleDateString()}</p>
+                                <p className="text-sm text-gray-500">
+                                    {group.member_count} member{group.member_count !== 1 ? 's' : ''} · Joined {new Date(group.joined_at).toLocaleDateString()}
+                                </p>
                             </div>
                         </div>
                         <div className="flex items-center gap-3">

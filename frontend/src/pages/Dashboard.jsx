@@ -9,46 +9,47 @@ import { Link } from 'react-router-dom';
 ChartJS.register(ArcElement, Tooltip, Legend);
 
 const Dashboard = () => {
-    const { user } = useAuth();
+    const { user, loading: authLoading } = useAuth();
     const [stats, setStats] = useState(null);
     const [activity, setActivity] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
 
     useEffect(() => {
-        const fetchStats = async () => {
-            // Mock data for frontend only mode
-            const mockStats = {
-                you_owe: 500,
-                you_are_owed: 1200,
-                monthly_spend: 3500,
-                overall_balance: 700
-            };
-            const mockActivity = [
-                { type: 'PAYMENT', from_name: 'You', to_name: 'Alice', amount: 200, description: 'Lunch', created_at: new Date().toISOString() },
-                { type: 'EXPENSE', from_name: 'Bob', to_name: 'You', amount: 150, description: 'Taxi', created_at: new Date().toISOString() }
-            ];
-
-            setStats(mockStats);
-            setActivity(mockActivity);
-            setLoading(false);
+        if (authLoading) return;  // wait for session restore to finish first
+        const fetchDashboard = async () => {
+            if (!user) {
+                setLoading(false);  // not logged in — stop spinner
+                return;
+            }
+            try {
+                const [statsRes, activityRes] = await Promise.all([
+                    api.get('/api/dashboard/stats'),
+                    api.get('/api/dashboard/activity'),
+                ]);
+                setStats(statsRes.data);
+                setActivity(activityRes.data);
+            } catch (err) {
+                setError('Failed to load dashboard data.');
+            } finally {
+                setLoading(false);
+            }
         };
-        if (user) fetchStats();
-    }, [user]);
+        fetchDashboard();
+    }, [user, authLoading]);
+
 
     if (loading) return <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
+    if (error) return <div className="text-center p-12 text-red-600">{error}</div>;
 
     const chartData = {
         labels: ['You Owe', 'You are Owed', 'Monthly Spend'],
-        datasets: [
-            {
-                data: [stats?.you_owe || 0, stats?.you_are_owed || 0, stats?.monthly_spend || 0],
-                backgroundColor: ['#EF4444', '#10B981', '#4F46E5'],
-                borderWidth: 0,
-            },
-        ],
+        datasets: [{
+            data: [stats?.you_owe || 0, stats?.you_are_owed || 0, stats?.monthly_spend || 0],
+            backgroundColor: ['#EF4444', '#10B981', '#4F46E5'],
+            borderWidth: 0,
+        }],
     };
-
-    if (!stats && !loading) return <div className="text-center p-12 text-red-600">Failed to load dashboard data.</div>;
 
     return (
         <div className="space-y-6">
@@ -117,7 +118,7 @@ const Dashboard = () => {
                 </div>
             </div>
 
-            {/* Analytics Preview */}
+            {/* Analytics Preview + Activity */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="card">
                     <h3 className="text-lg font-bold text-gray-900 mb-4">Expense Analysis</h3>
@@ -141,17 +142,14 @@ const Dashboard = () => {
                                         <p className="text-gray-500 text-xs">{item.description}</p>
                                     </div>
                                     <div className="text-right">
-                                        <p className={`font-bold ${(item.type === 'EXPENSE' && item.to_name === user.first_name) ? 'text-red-600' : 'text-gray-900'
-                                            }`}>
-                                            ₹ {item.amount}
-                                        </p>
+                                        <p className="font-bold text-gray-900">₹ {item.amount}</p>
                                         <p className="text-xs text-gray-400">{new Date(item.created_at).toLocaleDateString()}</p>
                                     </div>
                                 </div>
                             ))
                         ) : (
                             <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                                <p>No recent activity available</p>
+                                <p>No recent activity yet</p>
                             </div>
                         )}
                     </div>
