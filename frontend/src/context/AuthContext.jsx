@@ -1,4 +1,4 @@
-import { createContext, useState, useContext, useEffect } from 'react';
+import { createContext, useState, useContext, useEffect, useCallback } from 'react';
 import api from '../lib/api';
 
 const AuthContext = createContext(null);
@@ -38,11 +38,18 @@ export const AuthProvider = ({ children }) => {
         return true;
     };
 
-    const logout = () => {
-        setUser(null);
-        localStorage.removeItem('splitzy_token');
-        localStorage.removeItem('splitzy_user');
-    };
+    const logout = useCallback(async () => {
+        try {
+            await api.post('/api/auth/logout');
+        } catch {
+            // If the token is already expired/invalid, still clear client state
+        } finally {
+            setUser(null);
+            localStorage.removeItem('splitzy_token');
+            localStorage.removeItem('splitzy_user');
+            // ProtectedRoute watches `user` and redirects to /login automatically
+        }
+    }, []);
 
     return (
         <AuthContext.Provider value={{ user, login, logout, loading }}>

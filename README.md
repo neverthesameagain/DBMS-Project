@@ -6,7 +6,7 @@ A full-stack financial management and expense-splitting application built as a D
 
 ## What it does
 
-- Make **UPI-style payments** between users within the app
+- Make **UPI payments** between users within the app
 - Create **expense groups** and split costs equally or unequally
 - Track **who owes whom** with per-member balance calculations
 - Set **personal category budgets** (Food, Travel, etc.) and monitor spend vs allocation

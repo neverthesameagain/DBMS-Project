@@ -36,7 +36,7 @@ def create_group():
     if not group_name:
         return jsonify({"error": "Group name is required"}), 400
 
-    new_group = Group(group_name=group_name, created_by=current_user_id)
+    new_group = Group(group_name=group_name)
     db.session.add(new_group)
     db.session.flush()  # get group_id before commit
 

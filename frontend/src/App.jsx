@@ -33,39 +33,27 @@ function App() {
           <Route path="/signup" element={<Signup />} />
 
           <Route path="/" element={
-            <Layout>
-              <Dashboard />
-            </Layout>
+            <ProtectedRoute><Dashboard /></ProtectedRoute>
           } />
 
           <Route path="/groups" element={
-            <Layout>
-              <Groups />
-            </Layout>
+            <ProtectedRoute><Groups /></ProtectedRoute>
           } />
 
           <Route path="/groups/:groupId" element={
-            <Layout>
-              <GroupDetails />
-            </Layout>
+            <ProtectedRoute><GroupDetails /></ProtectedRoute>
           } />
 
           <Route path="/analytics" element={
-            <Layout>
-              <Analytics />
-            </Layout>
+            <ProtectedRoute><Analytics /></ProtectedRoute>
           } />
 
           <Route path="/payments" element={
-            <Layout>
-              <Payments />
-            </Layout>
+            <ProtectedRoute><Payments /></ProtectedRoute>
           } />
 
           <Route path="/future" element={
-            <Layout>
-              <FutureExpenses />
-            </Layout>
+            <ProtectedRoute><FutureExpenses /></ProtectedRoute>
           } />
 
           {/* Redirect unknown routes */}

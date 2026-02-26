@@ -1,10 +1,17 @@
 from flask import Blueprint, request, jsonify
 from app.models import User
-from app.extensions import db, bcrypt
-from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
+from app.extensions import db, bcrypt, jwt
+from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
 from datetime import datetime
 
 auth_bp = Blueprint('auth', __name__)
+
+# In-memory blocklist for invalidated JWT tokens (JTIs)
+_token_blocklist: set[str] = set()
+
+@jwt.token_in_blocklist_loader
+def check_if_token_revoked(jwt_header, jwt_payload):
+    return jwt_payload["jti"] in _token_blocklist
 
 
 @auth_bp.route('/signup', methods=['POST'])
@@ -66,3 +73,11 @@ def profile():
     if not user:
         return jsonify({"error": "User not found"}), 404
     return jsonify(user.to_dict()), 200
+
+
+@auth_bp.route('/logout', methods=['POST'])
+@jwt_required()
+def logout():
+    jti = get_jwt()["jti"]
+    _token_blocklist.add(jti)
+    return jsonify({"message": "Successfully logged out"}), 200

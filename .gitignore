@@ -46,7 +46,6 @@ frontend/.vite/
 *.swp
 *.swo
 
-# --- Database folder (SQL source files, not for git) ---
 database/
 
 # --- Logs ---
