@@ -15,11 +15,13 @@ def create_app():
     jwt.init_app(app)
 
     # Enable CORS for all /api/* routes from the Vite dev server
-    CORS(app, resources={r"/api/*": {"origins": [
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:3000",
-    ]}}, supports_credentials=True)
+    frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:5173")
+
+    CORS(
+        app,
+        resources={r"/api/*": {"origins": [frontend_url]}},
+        supports_credentials=True
+    )
 
     # Register all blueprints
     from app.routes.auth_routes import auth_bp
