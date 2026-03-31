@@ -127,7 +127,7 @@ class PersonalExpenseSplit(db.Model):
     allocated_amount = db.Column(db.Numeric(12, 2), nullable=False, default=0.00)
     amount_spent     = db.Column(db.Numeric(12, 2), nullable=False, default=0.00)
     reminder_for     = db.Column(db.Date)
-    duration         = db.Column(db.String(20), default='monthly')
+    duration         = db.Column(db.Integer, default=30)
 
     category = db.relationship('Category')
 
@@ -251,7 +251,7 @@ class FutureExpense(db.Model):
     category_id       = db.Column(db.Integer, db.ForeignKey('category.category_id', ondelete='SET NULL'), nullable=True)
     estimated_amount  = db.Column(db.Numeric(12, 2), nullable=False)
     expected_date     = db.Column(db.Date)
-    status            = db.Column(db.String(20), nullable=False, default='PLANNED')  # PLANNED | PAID | CANCELLED
+    status            = db.Column(db.String(20), nullable=False, default='PLANNED')  # PLANNED | COMPLETED | CANCELLED
     created_at        = db.Column(db.DateTime(timezone=True), default=now)
 
     category = db.relationship('Category')

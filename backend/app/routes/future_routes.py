@@ -59,9 +59,9 @@ def update_future_expense(future_id):
 
     data = request.get_json()
     if 'status' in data:
-        item.status = data['status']  # PLANNED | PAID | CANCELLED
+        item.status = data['status']  # PLANNED | COMPLETED | CANCELLED
     if 'is_completed' in data and data['is_completed']:
-        item.status = 'PAID'
+        item.status = 'COMPLETED'
     if 'estimated_amount' in data:
         item.estimated_amount = float(data['estimated_amount'])
 

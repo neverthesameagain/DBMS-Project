@@ -30,11 +30,31 @@ def get_stats():
     ).all()
     monthly_spend = sum(float(r.amount) for r in monthly_rows)
 
+    category_breakdown = {}
+    for r in monthly_rows:
+        cat_name = r.category.category_name if r.category else 'General'
+        category_breakdown[cat_name] = round(category_breakdown.get(cat_name, 0.0) + float(r.amount), 2)
+
+    # Active Groups
+    memberships = GroupMember.query.filter_by(user_id=current_user_id).all()
+    active_groups_count = len(memberships)
+
+    # Payment specific generic stats
+    sent_payments = Payment.query.filter_by(from_user_id=current_user_id).all()
+    total_sent = sum(float(p.amount) for p in sent_payments)
+
+    received_payments = Payment.query.filter_by(to_user_id=current_user_id).all()
+    total_received = sum(float(p.amount) for p in received_payments)
+
     return jsonify({
-        'you_owe':        round(you_owe, 2),
-        'you_are_owed':   round(you_are_owed, 2),
-        'monthly_spend':  round(monthly_spend, 2),
-        'overall_balance': round(float(user.current_balance), 2) if user else 0,
+        'you_owe':          round(you_owe, 2),
+        'you_are_owed':     round(you_are_owed, 2),
+        'monthly_spend':    round(monthly_spend, 2),
+        'overall_balance':  round(float(user.current_balance), 2) if user else 0,
+        'category_breakdown': category_breakdown,
+        'active_groups':    active_groups_count,
+        'total_sent':       round(total_sent, 2),
+        'total_received':   round(total_received, 2),
     }), 200
 
 

@@ -1,8 +1,9 @@
 Flask
 Flask-SQLAlchemy
+Flask-CORS
 Flask-Migrate
 Flask-Bcrypt
 Flask-JWT-Extended
 psycopg2-binary
 python-dotenv
-flask-cors
+psycopg2-binary

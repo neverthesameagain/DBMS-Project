@@ -23,6 +23,9 @@ import Analytics from './pages/Analytics';
 import Payments from './pages/Payments';
 import Signup from './pages/Signup';
 import FutureExpenses from './pages/FutureExpenses';
+import Ledger from './pages/Ledger';
+import Budgets from './pages/Budgets';
+import Profile from './pages/Profile';
 
 function App() {
   return (
@@ -54,6 +57,18 @@ function App() {
 
           <Route path="/future" element={
             <ProtectedRoute><FutureExpenses /></ProtectedRoute>
+          } />
+
+          <Route path="/ledger" element={
+            <ProtectedRoute><Ledger /></ProtectedRoute>
+          } />
+
+          <Route path="/budgets" element={
+            <ProtectedRoute><Budgets /></ProtectedRoute>
+          } />
+
+          <Route path="/profile" element={
+            <ProtectedRoute><Profile /></ProtectedRoute>
           } />
 
           {/* Redirect unknown routes */}

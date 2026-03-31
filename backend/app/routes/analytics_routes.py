@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify
-from app.models import ExpenseSplitGroup, GroupMember, Category
+from app.models import ExpenseSplitGroup, GroupMember, Category, Payment
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
 analytics_bp = Blueprint('analytics', __name__)
@@ -42,6 +42,12 @@ def get_analytics():
         if r.paid_by != current_user_id
     )
 
+    sent_payments = Payment.query.filter_by(from_user_id=current_user_id).all()
+    total_sent = sum(float(p.amount) for p in sent_payments)
+
+    received_payments = Payment.query.filter_by(to_user_id=current_user_id).all()
+    total_received = sum(float(p.amount) for p in received_payments)
+
     return jsonify({
         'category_breakdown': [
             {'category': k, 'amount': round(v, 2)}
@@ -54,4 +60,6 @@ def get_analytics():
         'total_paid':    round(total_paid, 2),
         'you_are_owed':  round(you_are_owed, 2),
         'you_owe':       round(you_owe, 2),
+        'total_sent':    round(total_sent, 2),
+        'total_received':round(total_received, 2),
     }), 200
