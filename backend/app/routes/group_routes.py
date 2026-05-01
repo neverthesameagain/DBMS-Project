@@ -13,15 +13,36 @@ def get_groups():
     current_user_id = int(get_jwt_identity())
     memberships = GroupMember.query.filter_by(user_id=current_user_id).all()
 
+    from app.models import ExpenseSplitGroup
     result = []
     for m in memberships:
         g = m.group
+        
+        # Calculate unsettled net balances for current user in this group
+        paid_as_payer = sum(
+            float(expense.amount) for expense in ExpenseSplitGroup.query.filter_by(
+                group_id=g.group_id, paid_by=current_user_id, is_settled=False
+            ).all() if expense.paid_for != current_user_id
+        )
+        
+        paid_as_debtor = sum(
+            float(expense.amount) for expense in ExpenseSplitGroup.query.filter_by(
+                group_id=g.group_id, paid_for=current_user_id, is_settled=False
+            ).all() if expense.paid_by != current_user_id
+        )
+
+        net_balance = paid_as_payer - paid_as_debtor
+
+        if not g:
+            continue
+
         result.append({
             'group_id': g.group_id,
             'group_name': g.group_name,
             'role': m.role,
             'joined_at': m.joined_at.isoformat(),
             'member_count': len(g.members),
+            'net_balance': round(net_balance, 2)
         })
     return jsonify(result), 200
 
@@ -75,6 +96,8 @@ def get_group_members(group_id):
     result = []
     for m in members:
         user = User.query.get(m.user_id)
+        if not user or not user.is_active:
+            continue
         result.append({
             'user_id': user.user_id,
             'first_name': user.first_name,
@@ -101,9 +124,9 @@ def add_group_member(group_id):
     data = request.get_json()
     target_user = None
     if data.get('email'):
-        target_user = User.query.filter_by(email=data['email']).first()
+        target_user = User.query.filter_by(email=data['email'], is_active=True).first()
     elif data.get('user_id'):
-        target_user = User.query.get(data['user_id'])
+        target_user = User.query.filter_by(user_id=data['user_id'], is_active=True).first()
 
     if not target_user:
         return jsonify({"error": "User not found"}), 404
@@ -112,11 +135,37 @@ def add_group_member(group_id):
     if existing:
         return jsonify({"error": "User is already a member"}), 409
 
-    new_member = GroupMember(group_id=group_id, user_id=target_user.user_id, role='Member')
+    role = data.get('role', 'Member')
+    if role not in ['Admin', 'Member']:
+        return jsonify({"error": "Invalid role specified"}), 400
+
+    new_member = GroupMember(group_id=group_id, user_id=target_user.user_id, role=role)
     db.session.add(new_member)
     db.session.commit()
 
-    return jsonify({"message": f"{target_user.first_name} added to group"}), 201
+    return jsonify({"message": f"{target_user.first_name} added to group as {role}"}), 201
+
+@group_bp.route('/<int:group_id>/members/<int:user_id>', methods=['PUT'])
+@jwt_required()
+def update_group_member_role(group_id, user_id):
+    current_user_id = int(get_jwt_identity())
+
+    admin_check = GroupMember.query.filter_by(group_id=group_id, user_id=current_user_id, role='Admin').first()
+    if not admin_check:
+        return jsonify({"error": "Only admins can change roles"}), 403
+
+    data = request.get_json()
+    new_role = data.get('role')
+    if new_role not in ['Admin', 'Member']:
+        return jsonify({"error": "Invalid role specified"}), 400
+
+    member = GroupMember.query.filter_by(group_id=group_id, user_id=user_id).first()
+    if not member:
+        return jsonify({"error": "Member not found"}), 404
+
+    member.role = new_role
+    db.session.commit()
+    return jsonify({"message": f"Role updated to {new_role}"}), 200
 
 
 @group_bp.route('/<int:group_id>/members/<int:user_id>', methods=['DELETE'])

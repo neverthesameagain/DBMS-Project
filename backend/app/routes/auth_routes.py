@@ -56,7 +56,7 @@ def login():
     email = data.get('email')
     password = data.get('password')
 
-    user = User.query.filter_by(email=email).first()
+    user = User.query.filter_by(email=email, is_active=True).first()
 
     if user and bcrypt.check_password_hash(user.hashed_password, password):
         access_token = create_access_token(identity=str(user.user_id))
@@ -70,7 +70,7 @@ def login():
 def profile():
     current_user_id = get_jwt_identity()
     user = User.query.get(int(current_user_id))
-    if not user:
+    if not user or not user.is_active:
         return jsonify({"error": "User not found"}), 404
     return jsonify(user.to_dict()), 200
 

@@ -34,6 +34,8 @@ class User(db.Model):
     hashed_password = db.Column(db.String(128), nullable=False)
     opening_balance = db.Column(db.Numeric(12, 2), default=0.00)
     current_balance = db.Column(db.Numeric(12, 2), default=0.00)
+    role            = db.Column(db.String(10), nullable=False, default='USER')
+    is_active       = db.Column(db.Boolean, nullable=False, default=True)
     created_at      = db.Column(db.DateTime(timezone=True), default=now)
 
     # Relationships
@@ -55,6 +57,8 @@ class User(db.Model):
             'phone_number':    self.phone_number,
             'opening_balance': float(self.opening_balance or 0),
             'current_balance': float(self.current_balance or 0),
+            'role':            self.role,
+            'is_active':       self.is_active,
         }
 
 
@@ -127,7 +131,7 @@ class PersonalExpenseSplit(db.Model):
     allocated_amount = db.Column(db.Numeric(12, 2), nullable=False, default=0.00)
     amount_spent     = db.Column(db.Numeric(12, 2), nullable=False, default=0.00)
     reminder_for     = db.Column(db.Date)
-    duration         = db.Column(db.String(20), default='monthly')
+    duration         = db.Column(db.Integer, default=30)
 
     category = db.relationship('Category')
 
@@ -180,7 +184,7 @@ class Payment(db.Model):
     payment_type  = db.Column(db.String(20), nullable=False, default='PERSONAL')  # PERSONAL | GROUP
     status        = db.Column(db.String(20), nullable=False, default='COMPLETED') # PENDING | COMPLETED | FAILED
     note          = db.Column(db.String(200))
-    transaction_id = db.Column(db.Integer, db.ForeignKey('transactions.transaction_id', ondelete='SET NULL'), nullable=True)
+    transaction_id = db.Column(db.Integer, db.ForeignKey('transactions.transaction_id', ondelete='RESTRICT'), nullable=False)
     created_at    = db.Column(db.DateTime(timezone=True), default=now)
 
     category    = db.relationship('Category')
@@ -251,7 +255,7 @@ class FutureExpense(db.Model):
     category_id       = db.Column(db.Integer, db.ForeignKey('category.category_id', ondelete='SET NULL'), nullable=True)
     estimated_amount  = db.Column(db.Numeric(12, 2), nullable=False)
     expected_date     = db.Column(db.Date)
-    status            = db.Column(db.String(20), nullable=False, default='PLANNED')  # PLANNED | PAID | CANCELLED
+    status            = db.Column(db.String(20), nullable=False, default='PLANNED')  # PLANNED | COMPLETED | CANCELLED
     created_at        = db.Column(db.DateTime(timezone=True), default=now)
 
     category = db.relationship('Category')
