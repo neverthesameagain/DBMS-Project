@@ -22,6 +22,7 @@ const GroupDetails = () => {
     const [category, setCategory] = useState('General');
     const [splits, setSplits] = useState({});
     const [submitting, setSubmitting] = useState(false);
+    const [expenseFormError, setExpenseFormError] = useState('');
 
     // Add member
     const [newMemberEmail, setNewMemberEmail] = useState('');
@@ -53,7 +54,7 @@ const GroupDetails = () => {
             const initSplits = {};
             membersRes.data.forEach(m => { initSplits[m.user_id] = 0; });
             setSplits(initSplits);
-        } catch (err) {
+        } catch {
             setError('Failed to load group details.');
         } finally {
             setLoading(false);
@@ -62,6 +63,7 @@ const GroupDetails = () => {
 
     useEffect(() => {
         fetchAll();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [groupId]);
 
     const handleEqualSplit = () => {
@@ -83,7 +85,11 @@ const GroupDetails = () => {
 
     const submitExpense = async (e) => {
         e.preventDefault();
-        if (!amount || parseFloat(amount) <= 0) return alert('Invalid amount');
+        setExpenseFormError('');
+        if (!amount || parseFloat(amount) <= 0) {
+            setExpenseFormError('Amount must be positive');
+            return;
+        }
         setSubmitting(true);
         try {
             if (editExpenseId) {
@@ -103,9 +109,10 @@ const GroupDetails = () => {
             setEditExpenseId(null);
             setAmount('');
             setDescription('');
+            setExpenseFormError('');
             fetchAll();
         } catch (err) {
-            alert('Error adding/editing expense: ' + (err.response?.data?.error || err.message));
+            setExpenseFormError(err.response?.data?.error || err.message || 'Failed to save expense');
         } finally {
             setSubmitting(false);
         }
@@ -251,6 +258,7 @@ const GroupDetails = () => {
             <section>
                 <button onClick={() => {
                     setAmount(''); setDescription(''); setEditExpenseId(null);
+                    setExpenseFormError('');
                     setShowExpenseForm(!showExpenseForm);
                 }} className="btn btn-primary flex items-center gap-2 mb-6">
                     <Plus className="w-4 h-4" /> {showExpenseForm ? 'Cancel' : 'Add Expense'}
@@ -304,8 +312,23 @@ const GroupDetails = () => {
                                 </>
                             )}
 
+                            {expenseFormError && (
+                                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                                    {expenseFormError}
+                                </div>
+                            )}
+
                             <div className="flex justify-end gap-2 pt-2">
-                                <button type="button" onClick={() => setShowExpenseForm(false)} className="btn btn-secondary">Cancel</button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setExpenseFormError('');
+                                        setShowExpenseForm(false);
+                                    }}
+                                    className="btn btn-secondary"
+                                >
+                                    Cancel
+                                </button>
                                 <button type="submit" className="btn btn-primary" disabled={submitting}>
                                     {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save Expense'}
                                 </button>

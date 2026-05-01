@@ -51,6 +51,7 @@ def search_users():
         return jsonify([]), 200
 
     users = User.query.filter(
+        User.is_active.is_(True),
         (User.email.ilike(f'%{query}%')) | (User.phone_number.ilike(f'%{query}%'))
     ).limit(10).all()
 

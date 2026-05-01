@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify
 from app.models import ExpenseSplitGroup, GroupMember, User, Category
 from app.extensions import db
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from sqlalchemy import text
 
 expense_bp = Blueprint('expenses', __name__)
 
@@ -50,14 +51,22 @@ def get_expenses(group_id):
 @expense_bp.route('/groups/<int:group_id>/expenses', methods=['POST'])
 @jwt_required()
 def add_expense(group_id):
-    """Add an expense and create one expense_split_group row per member."""
+    """Add an expense through the DB stored procedure.
+
+    The database owns split insertion and transaction creation so the
+    transaction ledger cannot drift from expense data.
+    """
     current_user_id = int(get_jwt_identity())
 
     if not GroupMember.query.filter_by(group_id=group_id, user_id=current_user_id).first():
         return jsonify({"error": "Access denied"}), 403
 
-    data = request.get_json()
-    amount = float(data.get('amount', 0))
+    data = request.get_json() or {}
+    try:
+        amount = float(data.get('amount', 0))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid amount"}), 400
+
     if amount <= 0:
         return jsonify({"error": "Amount must be positive"}), 400
 
@@ -66,10 +75,35 @@ def add_expense(group_id):
     cat = Category.query.filter_by(category_name=category_name).first()
     category_id = cat.category_id if cat else None
 
-    # Determine who to split with (default: all group members)
-    split_with = data.get('split_with')
-    if split_with:
-        member_ids = [int(uid) for uid in split_with]
+    # Determine who to split with (default: all group members). Custom
+    # amounts can be supplied as {"splits": {"2": 500, "3": 750}}.
+    split_amounts = None
+    splits_payload = data.get('splits')
+    if isinstance(splits_payload, dict):
+        member_ids = []
+        split_amounts = []
+        for uid, split_amount in splits_payload.items():
+            try:
+                value = float(split_amount)
+            except (TypeError, ValueError):
+                return jsonify({"error": "Invalid split amount"}), 400
+            if value > 0:
+                member_ids.append(int(uid))
+                split_amounts.append(value)
+    elif isinstance(splits_payload, list):
+        member_ids = []
+        split_amounts = []
+        for item in splits_payload:
+            try:
+                uid = int(item.get('user_id'))
+                value = float(item.get('amount'))
+            except (AttributeError, TypeError, ValueError):
+                return jsonify({"error": "Invalid split amount"}), 400
+            if value > 0:
+                member_ids.append(uid)
+                split_amounts.append(value)
+    elif data.get('split_with'):
+        member_ids = [int(uid) for uid in data.get('split_with')]
     else:
         members = GroupMember.query.filter_by(group_id=group_id).all()
         member_ids = [m.user_id for m in members]
@@ -77,28 +111,52 @@ def add_expense(group_id):
     if not member_ids:
         return jsonify({"error": "No members to split with"}), 400
 
-    share = round(amount / len(member_ids), 2)
+    payable_member_ids = [uid for uid in member_ids if uid != current_user_id]
+    if not payable_member_ids:
+        return jsonify({
+            "error": "Add at least one other active group member before creating a group expense"
+        }), 400
+
     description = data.get('description', '')
 
-    created_rows = []
-    for uid in member_ids:
-        if uid == current_user_id:
-            # Payer doesn't owe themselves, skip creating a split for their own share
-            continue
-
-        row = ExpenseSplitGroup(
-            group_id=group_id,
-            category_id=category_id,
-            paid_by=current_user_id,
-            paid_for=uid,
-            amount=share,
-            description=description,
-            is_settled=False,
+    try:
+        result = db.session.execute(
+            text("""
+                SELECT expense_id
+                FROM create_group_expense(
+                    :group_id,
+                    :paid_by,
+                    CAST(:member_ids AS INTEGER[]),
+                    :amount,
+                    :category_id,
+                    :description,
+                    CAST(:split_amounts AS NUMERIC[])
+                )
+            """),
+            {
+                "group_id": group_id,
+                "paid_by": current_user_id,
+                "member_ids": member_ids,
+                "amount": amount,
+                "category_id": category_id,
+                "description": description,
+                "split_amounts": split_amounts,
+            },
         )
-        db.session.add(row)
-        created_rows.append(row)
+        created_ids = [row.expense_id for row in result]
+        if not created_ids:
+            db.session.rollback()
+            return jsonify({"error": "No payable split rows were created"}), 400
 
-    db.session.commit()
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"error": str(exc)}), 400
+
+    created_rows = ExpenseSplitGroup.query.filter(
+        ExpenseSplitGroup.expense_id.in_(created_ids)
+    ).order_by(ExpenseSplitGroup.expense_id).all()
+
     return jsonify([r.to_dict() for r in created_rows]), 201
 
 
@@ -115,6 +173,8 @@ def get_group_balances(group_id):
     balances = {}
     for m in members:
         u = User.query.get(m.user_id)
+        if not u or not u.is_active:
+            continue
         balances[m.user_id] = {
             'user_id': m.user_id,
             'name': f"{u.first_name} {u.last_name}" if u else "Unknown",
@@ -143,49 +203,19 @@ def get_group_balances(group_id):
 @expense_bp.route('/groups/<int:group_id>/expenses/<int:expense_id>', methods=['DELETE'])
 @jwt_required()
 def delete_expense(group_id, expense_id):
-    current_user_id = int(get_jwt_identity())
-    admin_check = GroupMember.query.filter_by(group_id=group_id, user_id=current_user_id, role='Admin').first()
-    if not admin_check:
-        return jsonify({"error": "Only admins can delete expenses"}), 403
-
-    row = ExpenseSplitGroup.query.get(expense_id)
-    if not row or row.group_id != group_id:
-        return jsonify({"error": "Expense row not found"}), 404
-
-    db.session.delete(row)
-    db.session.commit()
-    return jsonify({"message": "Expense split deleted"}), 200
+    """Splits are ledger-backed; removing rows would orphan transactions rows."""
+    return jsonify({
+        "error": "Expense splits cannot be deleted; each row has a matching ledger transaction in PostgreSQL.",
+    }), 403
 
 
 @expense_bp.route('/groups/<int:group_id>/expenses/<int:expense_id>', methods=['PUT'])
 @jwt_required()
 def update_expense(group_id, expense_id):
-    current_user_id = int(get_jwt_identity())
-    admin_check = GroupMember.query.filter_by(group_id=group_id, user_id=current_user_id, role='Admin').first()
-    if not admin_check:
-        return jsonify({"error": "Only admins can edit expenses"}), 403
-
-    row = ExpenseSplitGroup.query.get(expense_id)
-    if not row or row.group_id != group_id:
-        return jsonify({"error": "Expense row not found"}), 404
-
-    data = request.get_json()
-    new_amount = data.get('amount')
-    if new_amount is not None:
-        try:
-            val = float(new_amount)
-            if val <= 0:
-                return jsonify({"error": "Amount must be positive"}), 400
-            row.amount = val
-        except ValueError:
-            return jsonify({"error": "Invalid amount"}), 400
-
-    new_desc = data.get('description')
-    if new_desc is not None:
-        row.description = str(new_desc)
-    
-    db.session.commit()
-    return jsonify({"message": "Expense split updated"}), 200
+    """Amount changes are rejected: ledger amounts are created only on INSERT via trigger."""
+    return jsonify({
+        "error": "Expense splits are immutable after creation; amounts are enforced in the transactions table by triggers.",
+    }), 403
 
 
 @expense_bp.route('/groups/<int:group_id>/settle', methods=['POST'])

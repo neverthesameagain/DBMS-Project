@@ -1,75 +1,108 @@
-# Splitzy Pay
+# Splitzy Pay 
 
-A full-stack financial management and expense-splitting application built as a DBMS course project.
+*A simple and scalable payments and expense sharing app
 
----
-
-## What it does
-
-- Make **UPI payments** between users within the app
-- Create **expense groups** and split costs equally or unequally
-- Track **who owes whom** with per-member balance calculations
-- Set **personal category budgets** (Food, Travel, etc.) and monitor spend vs allocation
-- Generate **analytics** — category breakdowns and monthly spending trends
-- Plan **future expenses** with status tracking (Planned → Paid / Cancelled)
-- Every transaction is recorded in a **unified financial ledger**
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|---|---|
-| Frontend | React 19 + Vite, React Router v7, Tailwind CSS v3, Chart.js, Axios |
-| Backend | Python / Flask, SQLAlchemy ORM, Flask-JWT-Extended, Flask-Bcrypt, Flask-CORS |
-| Database | PostgreSQL (production) / SQLite (local dev) |
-| Auth | JWT — stateless tokens, bcrypt password hashing |
+Splitzy Pay is a full-stack expense sharing platform designed to simplify group expenses, settlements, and balance tracking.
+The project follows a **clean monorepo structure** with clearly separated **frontend**, **backend**, and **database** layers, making it easy to develop, test, and deploy independently.
 
 ---
 
 ## Project Structure
 
-```
-DBMS-Project/
-├── backend/          # Flask REST API (port 5001)
-├── frontend/         # React/Vite app (port 5173)
-├── database/         # PostgreSQL schema, seed data, reference queries
-│   ├── schema.sql
-│   ├── seed.sql
-│   ├── queries.sql
-│   └── README.md
-└── .gitignore
-```
+Please follow this folder structure to keep things simple.
 
-See the `README.md` in each subfolder for detailed setup instructions.
+```
+splitzy-pay/
+│
+├── backend/
+│   ├── app/                # Flask application code
+│   ├── migrations/         # Database migrations
+│   ├── requirements.txt    # Backend dependencies
+│   ├── run.py              # Entry point for backend server
+│   └── README.md           # Backend-specific documentation
+│
+├── frontend/
+│   ├── src/
+│   │   ├── pages/          # Application pages/views
+│   │   ├── ux_elements/    # Reusable UI components
+│   │   ├── services/
+│   │   │   └── api.js      # API service layer
+│   │   └── App.jsx         # Root React component
+│   ├── public/             # Static assets
+│   ├── package.json        # Frontend dependencies & scripts
+│   └── README.md           # Frontend-specific documentation
+│
+├── database/
+│   ├── schema.sql          # Database schema definition
+│   ├── seed.sql            # Initial seed data
+│   ├── queries.sql         # Common SQL queries
+│   └── README.md           # Database documentation
+│
+├── docs/
+│   ├── ER_Diagram.png      # Entity Relationship Diagram
+│   ├── API_Docs.md         # API documentation
+│   ├── Report.pdf          # Final project report
+│   └── Screenshots/        # UI screenshots
+│
+├── .env.example            # Environment variable template
+├── .gitignore
+└── README.md               # Project overview (this file)
+```
 
 ---
 
-## Running Locally
+## Tech Stack
 
-### Prerequisites
-- Python 3.11+
-- Node.js 18+
-- (Optional) PostgreSQL — SQLite works for local dev
+### Frontend
 
-### 1. Backend
+* React (Vite)
+* HTML, CSS, JavaScript
+* API communication via Axios / Fetch
+
+### Backend
+
+* Python (Flask)
+* RESTful API architecture
+* SQLAlchemy & Flask-Migrate
+
+### Database
+
+* PostgreSQL
+* Structured SQL schemas and queries
+
+### Deployment (Planned)
+
+* Frontend: Vercel
+* Backend & Database: Render
+
+---
+
+## 🚀 Getting Started
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/your-username/splitzy-pay.git
+cd splitzy-pay
+```
+
+### 2. Environment Variables
+
+Create a `.env` file using `.env.example` as reference and fill in the required values.
+
+---
+
+## ▶️ Running the Project
+
+### Backend
 
 ```bash
 cd backend
 pip install -r requirements.txt
-cp .env.example .env          # fill in DATABASE_URL + JWT_SECRET_KEY
-flask run --port=5001
+python run.py
 ```
 
-For local dev with no Postgres, set:
-```
-DATABASE_URL=sqlite:///splitzy.db
-JWT_SECRET_KEY=any-secret-string
-```
-
-The first run auto-creates all tables via `db.create_all()`.
-
-### 2. Frontend
+### Frontend
 
 ```bash
 cd frontend
@@ -77,30 +110,29 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173) — sign up and explore.
+### Database
+
+* Create a PostgreSQL database
+* Run `schema.sql` to initialize tables
+* Optionally run `seed.sql` for sample data
 
 ---
 
-## Database
+## Documentation
 
-The `database/` folder (gitignored) contains:
-- **`schema.sql`** — PostgreSQL DDL for all 10 tables
-- **`seed.sql`** — realistic demo data
-- **`queries.sql`** — reference SQL mirroring all API logic
+All project documentation is available in the `docs/` folder:
 
-To initialise a cloud PostgreSQL database:
-```bash
-psql $DATABASE_URL -f database/schema.sql
-psql $DATABASE_URL -f database/seed.sql   # optional
-```
+* **ER Diagram** – Database design
+* **API Docs** – Endpoint specifications
+* **Report** – Detailed DBMS project report
+* **Screenshots** – UI walkthrough
 
-Recommended free providers: [Neon](https://neon.tech) · [Supabase](https://supabase.com) · [Render](https://render.com)
 
 ---
 
-## Deployment
 
-| Service | What |
-|---|---|
-| [Render](https://render.com) | Backend (Flask) + PostgreSQL |
-| [Vercel](https://vercel.com) | Frontend (React/Vite) |
+* Each major folder (`frontend`, `backend`, `database`) contains its own `README.md` for detailed instructions.
+* Keep commits small and meaningful.
+* Do **not** commit `.env` files.
+
+---

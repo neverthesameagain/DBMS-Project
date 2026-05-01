@@ -58,7 +58,7 @@ const FutureExpenses = () => {
         try {
             await api.patch(`/api/future-expenses/${id}`, { is_completed: true });
             fetchData();
-        } catch (err) {
+        } catch {
             alert('Failed to update');
         }
     };
@@ -67,7 +67,7 @@ const FutureExpenses = () => {
         try {
             await api.delete(`/api/future-expenses/${id}`);
             fetchData();
-        } catch (err) {
+        } catch {
             alert('Failed to delete');
         }
     };

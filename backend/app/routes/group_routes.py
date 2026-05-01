@@ -33,6 +33,9 @@ def get_groups():
 
         net_balance = paid_as_payer - paid_as_debtor
 
+        if not g:
+            continue
+
         result.append({
             'group_id': g.group_id,
             'group_name': g.group_name,
@@ -93,6 +96,8 @@ def get_group_members(group_id):
     result = []
     for m in members:
         user = User.query.get(m.user_id)
+        if not user or not user.is_active:
+            continue
         result.append({
             'user_id': user.user_id,
             'first_name': user.first_name,
@@ -119,9 +124,9 @@ def add_group_member(group_id):
     data = request.get_json()
     target_user = None
     if data.get('email'):
-        target_user = User.query.filter_by(email=data['email']).first()
+        target_user = User.query.filter_by(email=data['email'], is_active=True).first()
     elif data.get('user_id'):
-        target_user = User.query.get(data['user_id'])
+        target_user = User.query.filter_by(user_id=data['user_id'], is_active=True).first()
 
     if not target_user:
         return jsonify({"error": "User not found"}), 404

@@ -1,6 +1,6 @@
-import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { LayoutDashboard, Users, PieChart, Wallet, LogOut, User, Calendar } from 'lucide-react';
+import { Database, LayoutDashboard, Users, PieChart, Wallet, LogOut, User, Calendar, ReceiptText, TerminalSquare } from 'lucide-react';
 import clsx from 'clsx';
 
 const Layout = ({ children }) => {
@@ -9,7 +9,7 @@ const Layout = ({ children }) => {
 
     const tempUserImage = `https://ui-avatars.com/api/?name=${user?.first_name}+${user?.last_name}&background=random`;
 
-    const navItems = [
+    const userNavItems = [
         { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
         { icon: Users, label: 'Groups', path: '/groups' },
         { icon: PieChart, label: 'Analytics', path: '/analytics' },
@@ -18,6 +18,16 @@ const Layout = ({ children }) => {
         { icon: Calendar, label: 'Ledger', path: '/ledger' },
         { icon: User, label: 'Profile', path: '/profile' },
     ];
+
+    const adminNavItems = [
+        { icon: Database, label: 'Admin', path: '/admin' },
+        { icon: Users, label: 'Users', path: '/admin/users' },
+        { icon: ReceiptText, label: 'Transactions', path: '/admin/transactions' },
+        { icon: Database, label: 'Tables', path: '/admin/tables' },
+        { icon: TerminalSquare, label: 'Query', path: '/admin/query' },
+    ];
+
+    const navItems = user?.role === 'ADMIN' ? adminNavItems : userNavItems;
 
     return (
         <div className="flex h-screen bg-gray-50">

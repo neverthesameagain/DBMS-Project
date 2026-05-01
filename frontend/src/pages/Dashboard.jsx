@@ -32,7 +32,7 @@ const Dashboard = () => {
                 setStats(statsRes.data);
                 setActivity(activityRes.data);
                 setBudgets(budgetsRes.data);
-            } catch (err) {
+            } catch {
                 setError('Failed to load dashboard data.');
             } finally {
                 setLoading(false);

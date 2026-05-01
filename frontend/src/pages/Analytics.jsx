@@ -31,7 +31,7 @@ const Analytics = () => {
             ]);
             setAnalytics(resAnalytics.data);
             setPayments(resPayments.data);
-        } catch (err) {
+        } catch {
             setError('Failed to load analytics.');
         } finally {
             setLoading(false);

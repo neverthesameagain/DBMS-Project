@@ -46,8 +46,6 @@ frontend/.vite/
 *.swp
 *.swo
 
-database/
-
 # --- Logs ---
 *.log
 npm-debug.log*

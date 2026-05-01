@@ -43,7 +43,7 @@ const Profile = () => {
         try {
             await api.delete(`/api/upi/${id}`);
             fetchUpis();
-        } catch (err) {
+        } catch {
             alert('Failed to delete UPI');
         }
     };

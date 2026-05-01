@@ -5,7 +5,7 @@ if os.environ.get("VERCEL") is None:
     load_dotenv()
 
 class Config:
-    SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL")
+    SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY")
 
@@ -14,8 +14,8 @@ class Config:
     }
 
 #  if env vars missing in production
-if not os.environ.get("DATABASE_URL"):
+if not os.getenv("DATABASE_URL"):
     raise RuntimeError("DATABASE_URL is not set.")
 
-if not os.environ.get("JWT_SECRET_KEY"):
+if not os.getenv("JWT_SECRET_KEY"):
     raise RuntimeError("JWT_SECRET_KEY is not set.")

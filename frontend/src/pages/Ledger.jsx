@@ -14,7 +14,7 @@ const Ledger = () => {
             try {
                 const res = await api.get('/api/ledger');
                 setLedger(res.data);
-            } catch (err) {
+            } catch {
                 setError('Failed to load ledger.');
             } finally {
                 setLoading(false);

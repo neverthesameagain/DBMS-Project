@@ -1,43 +1,50 @@
-import psycopg2
+#!/usr/bin/env python3
+"""Interactive DB helper — uses DATABASE_URL from the environment only."""
+import os
+import sys
 import time
 
-# paste your Neon DB connection string here
-DATABASE_URL="postgresql://neondb_owner:npg_5KRj3TWeuXry@ep-long-bar-a1abyz8y-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+import psycopg2
+
+
+def connection_url():
+    url = os.getenv("DATABASE_URL", "").strip()
+    if not url:
+        sys.stderr.write("Set DATABASE_URL (e.g. export from backend/.env)\n")
+        sys.exit(1)
+    return url
+
 
 def run_query(query):
-    conn = psycopg2.connect(DATABASE_URL)
+    conn = psycopg2.connect(connection_url())
     cur = conn.cursor()
     start_time = time.time()
     try:
         cur.execute(query)
-        # try fetching results if query returns rows
         try:
             result = cur.fetchall()
         except psycopg2.ProgrammingError:
             result = "Query executed (no rows returned)"
-
         conn.commit()
-
     except Exception as e:
         result = f"Error: {e}"
 
-    end_time = time.time()
-
-    execution_time = end_time - start_time
-
     print("\n----- RESULT -----")
     print(result)
-
     print("\n----- EXECUTION TIME -----")
-    print(f"{execution_time:.6f} seconds")
+    print(f"{time.time() - start_time:.6f} seconds")
 
     cur.close()
     conn.close()
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        run_query(" ".join(sys.argv[1:]))
+        sys.exit(0)
+
     while True:
-        query = input("\nEnter SQL Query (or type 'exit'): ")
-        if query.lower() == "exit":
+        q = input("\nEnter SQL Query (or type 'exit'): ")
+        if q.lower() == "exit":
             break
-        run_query(query)
+        run_query(q)

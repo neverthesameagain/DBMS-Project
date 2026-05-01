@@ -80,7 +80,7 @@ const Budgets = () => {
         try {
             await api.delete(`/api/budgets/${catId}`);
             fetchBudgets();
-        } catch (err) {
+        } catch {
             alert('Failed to delete budget');
         }
     };
