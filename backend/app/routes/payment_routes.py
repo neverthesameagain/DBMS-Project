@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from app.models import Payment, User, Category
+from app.models import Payment, User, Category, Transaction
 from app.extensions import db
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
@@ -38,6 +38,9 @@ def send_payment():
     if amount <= 0:
         return jsonify({"error": "Amount must be positive"}), 400
 
+    # Round to 2 decimal places to prevent floating-point issues
+    amount = round(amount, 2)
+
     from app.models import UpiId
     recipient_type = data.get('recipient_type', 'email')
     recipient_identifier = data.get('recipient_identifier', '').strip()
@@ -74,36 +77,57 @@ def send_payment():
 
     if payment_type == 'GROUP' and not group_id:
         return jsonify({"error": "Group ID is required for group payments"}), 400
-    
-    payment = Payment(
-        from_user_id=current_user_id,
-        to_user_id=to_user.user_id,
-        category_id=category_id,
-        amount=amount,
-        upi_ref=data.get('upi_ref'),
-        note=data.get('note'),
-        payment_type=payment_type,
-        status='COMPLETED',
-    )
-    db.session.add(payment)
-    db.session.flush()
 
-    # If tagged to a group, settle outstanding debts between sender and receiver in that group
-    if payment_type == 'GROUP' and group_id:
-        from app.models import ExpenseSplitGroup
-        debts = ExpenseSplitGroup.query.filter_by(
-            group_id=group_id,
-            paid_for=current_user_id,
-            paid_by=to_user.user_id,
-            is_settled=False
-        ).all()
-        for d in debts:
-            d.is_settled = True
-            d.payment_id = payment.payment_id
+    try:
+        # Create a Transaction record first (required FK for Payment)
+        txn = Transaction(
+            transaction_type='PAYMENT',
+            reference_id=0,  # Will update after payment is created
+            amount=amount,
+        )
+        db.session.add(txn)
+        db.session.flush()  # Get transaction_id
 
-    db.session.commit()
-    db.session.refresh(payment)
+        payment = Payment(
+            from_user_id=current_user_id,
+            to_user_id=to_user.user_id,
+            category_id=category_id,
+            amount=amount,
+            upi_ref=data.get('upi_ref'),
+            note=data.get('note'),
+            payment_type=payment_type,
+            status='COMPLETED',
+            transaction_id=txn.transaction_id,
+        )
+        db.session.add(payment)
+        db.session.flush()
 
-    d = payment.to_dict()
-    d['direction'] = 'sent'
-    return jsonify(d), 201
+        # Update the transaction reference to point to the payment
+        txn.reference_id = payment.payment_id
+
+        # If tagged to a group, settle outstanding debts between sender and receiver in that group
+        settled_count = 0
+        if payment_type == 'GROUP' and group_id:
+            from app.models import ExpenseSplitGroup
+            debts = ExpenseSplitGroup.query.filter_by(
+                group_id=group_id,
+                paid_for=current_user_id,
+                paid_by=to_user.user_id,
+                is_settled=False
+            ).all()
+            for d in debts:
+                d.is_settled = True
+                d.payment_id = payment.payment_id
+                settled_count += 1
+
+        db.session.commit()
+        db.session.refresh(payment)
+
+        d = payment.to_dict()
+        d['direction'] = 'sent'
+        d['settled_count'] = settled_count
+        return jsonify(d), 201
+
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"error": f"Payment failed: {str(exc)}"}), 500

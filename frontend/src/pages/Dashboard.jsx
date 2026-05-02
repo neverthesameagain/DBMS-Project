@@ -59,6 +59,12 @@ const Dashboard = () => {
         }],
     };
 
+    // Safe numeric formatting helper
+    const fmt = (val) => {
+        const n = parseFloat(val);
+        return isNaN(n) ? '0.00' : n.toFixed(2);
+    };
+
     return (
         <div className="space-y-6 max-w-5xl mx-auto">
             <header className="flex justify-between items-center py-4">
@@ -80,22 +86,35 @@ const Dashboard = () => {
             </header>
 
             {/* Budget Alerts */}
-            {budgets.filter(b => b.amount_spent / b.allocated_amount >= 0.70).length > 0 && (
+            {budgets.filter(b => {
+                const spent = parseFloat(b.amount_spent) || 0;
+                const allocated = parseFloat(b.allocated_amount) || 1;
+                return spent / allocated >= 0.70;
+            }).length > 0 && (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {budgets.filter(b => b.amount_spent / b.allocated_amount >= 0.70).map(b => (
-                        <div key={b.category_id} className="bg-orange-50 border border-orange-200 p-4 rounded-2xl flex items-center justify-between">
-                            <div>
-                                <h4 className="font-bold text-orange-800 text-sm flex items-center gap-1.5">
-                                    <AlertTriangle className="w-4 h-4" /> 
-                                    {b.category_name} Warning
-                                </h4>
-                                <p className="text-orange-600 text-[0.65rem] font-bold uppercase tracking-wider mt-1">₹{parseFloat(b.amount_spent).toFixed(0)} of ₹{parseFloat(b.allocated_amount).toFixed(0)} used ({(b.amount_spent/b.allocated_amount*100).toFixed(0)}%)</p>
+                    {budgets.filter(b => {
+                        const spent = parseFloat(b.amount_spent) || 0;
+                        const allocated = parseFloat(b.allocated_amount) || 1;
+                        return spent / allocated >= 0.70;
+                    }).map(b => {
+                        const spent = parseFloat(b.amount_spent) || 0;
+                        const allocated = parseFloat(b.allocated_amount) || 1;
+                        const pct = Math.round((spent / allocated) * 100);
+                        return (
+                            <div key={b.category_id} className="bg-orange-50 border border-orange-200 p-4 rounded-2xl flex items-center justify-between">
+                                <div>
+                                    <h4 className="font-bold text-orange-800 text-sm flex items-center gap-1.5">
+                                        <AlertTriangle className="w-4 h-4" /> 
+                                        {b.category_name} Warning
+                                    </h4>
+                                    <p className="text-orange-600 text-[0.65rem] font-bold uppercase tracking-wider mt-1">₹{spent.toFixed(0)} of ₹{allocated.toFixed(0)} used ({pct}%)</p>
+                                </div>
+                                <Link to="/budgets" className="text-orange-700 hover:text-orange-900 bg-orange-100/50 hover:bg-orange-200 px-3 py-1.5 rounded-xl text-xs font-bold transition-colors">
+                                    Review
+                                </Link>
                             </div>
-                            <Link to="/budgets" className="text-orange-700 hover:text-orange-900 bg-orange-100/50 hover:bg-orange-200 px-3 py-1.5 rounded-xl text-xs font-bold transition-colors">
-                                Review
-                            </Link>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             )}
 
@@ -107,7 +126,7 @@ const Dashboard = () => {
                         <p className="text-[0.65rem] font-bold text-gray-400 uppercase tracking-widest mb-1">Balance</p>
                         <h3 className="text-3xl font-light text-gray-900 flex items-baseline gap-1">
                             <span className="text-lg text-gray-400 font-medium">₹</span>
-                            {stats?.overall_balance || 0}
+                            {fmt(stats?.overall_balance)}
                         </h3>
                     </div>
                 </div>
@@ -118,7 +137,7 @@ const Dashboard = () => {
                         <p className="text-[0.65rem] font-bold text-gray-400 uppercase tracking-widest mb-1">Getting Back</p>
                         <h3 className="text-3xl font-light text-emerald-600 flex items-baseline gap-1">
                             <span className="text-lg text-emerald-400 font-medium">₹</span>
-                            {stats?.you_are_owed || 0}
+                            {fmt(stats?.you_are_owed)}
                         </h3>
                     </div>
                 </div>
@@ -129,7 +148,7 @@ const Dashboard = () => {
                         <p className="text-[0.65rem] font-bold text-gray-400 uppercase tracking-widest mb-1">Owe</p>
                         <h3 className="text-3xl font-light text-red-600 flex items-baseline gap-1">
                             <span className="text-lg text-red-400 font-medium">₹</span>
-                            {stats?.you_owe || 0}
+                            {fmt(stats?.you_owe)}
                         </h3>
                     </div>
                 </div>
@@ -164,8 +183,8 @@ const Dashboard = () => {
                                         </div>
                                     </div>
                                     <div className="text-right">
-                                        <p className="font-medium text-gray-900">₹{item.amount}</p>
-                                        <p className="text-[0.65rem] font-bold text-gray-400 tracking-wider uppercase mt-1">{new Date(item.created_at).toLocaleDateString()}</p>
+                                        <p className="font-medium text-gray-900">₹{fmt(item.amount)}</p>
+                                        <p className="text-[0.65rem] font-bold text-gray-400 tracking-wider uppercase mt-1">{item.created_at ? new Date(item.created_at).toLocaleDateString() : ''}</p>
                                     </div>
                                 </div>
                             ))

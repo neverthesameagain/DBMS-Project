@@ -12,6 +12,12 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Title, Tool
 
 const PALETTE = ['#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4', '#F97316'];
 
+// Safe numeric formatter
+const fmt = (val) => {
+    const n = parseFloat(val);
+    return isNaN(n) ? '0.00' : n.toFixed(2);
+};
+
 const Analytics = () => {
     const { user } = useAuth();
     const [analytics, setAnalytics] = useState(null);
@@ -42,10 +48,10 @@ const Analytics = () => {
     if (error) return <div className="text-center p-12 text-red-600">{error}</div>;
 
     const catLabels = analytics?.category_breakdown?.map(c => c.category) || [];
-    const catData = analytics?.category_breakdown?.map(c => c.amount) || [];
+    const catData = analytics?.category_breakdown?.map(c => parseFloat(c.amount) || 0) || [];
 
     const monthLabels = analytics?.monthly_spending?.map(m => m.month) || [];
-    const monthData = analytics?.monthly_spending?.map(m => m.amount) || [];
+    const monthData = analytics?.monthly_spending?.map(m => parseFloat(m.amount) || 0) || [];
 
     const doughnutData = {
         labels: catLabels,
@@ -77,7 +83,7 @@ const Analytics = () => {
                         <p className="text-[0.65rem] font-bold text-gray-400 uppercase tracking-widest mb-1">Paid</p>
                         <h3 className="text-2xl lg:text-3xl font-light text-indigo-600 flex items-baseline gap-1">
                             <span className="text-base text-indigo-400 font-medium">₹</span>
-                            {analytics?.total_paid || 0}
+                            {fmt(analytics?.total_paid)}
                         </h3>
                     </div>
                 </div>
@@ -86,7 +92,7 @@ const Analytics = () => {
                         <p className="text-[0.65rem] font-bold text-gray-400 uppercase tracking-widest mb-1">Sent</p>
                         <h3 className="text-2xl lg:text-3xl font-light text-orange-600 flex items-baseline gap-1">
                             <span className="text-base text-orange-400 font-medium">₹</span>
-                            {analytics?.total_sent || 0}
+                            {fmt(analytics?.total_sent)}
                         </h3>
                     </div>
                 </div>
@@ -95,7 +101,7 @@ const Analytics = () => {
                         <p className="text-[0.65rem] font-bold text-gray-400 uppercase tracking-widest mb-1">Received</p>
                         <h3 className="text-2xl lg:text-3xl font-light text-blue-600 flex items-baseline gap-1">
                             <span className="text-base text-blue-400 font-medium">₹</span>
-                            {analytics?.total_received || 0}
+                            {fmt(analytics?.total_received)}
                         </h3>
                     </div>
                 </div>
@@ -104,7 +110,7 @@ const Analytics = () => {
                         <p className="text-[0.65rem] font-bold text-gray-400 uppercase tracking-widest mb-1">Getting Back</p>
                         <h3 className="text-2xl lg:text-3xl font-light text-emerald-600 flex items-baseline gap-1">
                             <span className="text-base text-emerald-400 font-medium">₹</span>
-                            {analytics?.you_are_owed || 0}
+                            {fmt(analytics?.you_are_owed)}
                         </h3>
                     </div>
                 </div>
@@ -113,7 +119,7 @@ const Analytics = () => {
                         <p className="text-[0.65rem] font-bold text-gray-400 uppercase tracking-widest mb-1">You Owe</p>
                         <h3 className="text-2xl lg:text-3xl font-light text-red-600 flex items-baseline gap-1">
                             <span className="text-base text-red-400 font-medium">₹</span>
-                            {analytics?.you_owe || 0}
+                            {fmt(analytics?.you_owe)}
                         </h3>
                     </div>
                 </div>
@@ -167,7 +173,7 @@ const Analytics = () => {
                             <tbody>
                                 {payments.map(p => (
                                     <tr key={p.payment_id} className="border-b last:border-0 hover:bg-gray-50 transition-colors">
-                                        <td className="px-4 py-3 text-gray-500">{new Date(p.created_at).toLocaleDateString()}</td>
+                                        <td className="px-4 py-3 text-gray-500">{p.created_at ? new Date(p.created_at).toLocaleDateString() : '—'}</td>
                                         <td className="px-4 py-3">
                                             {p.direction === 'sent' ? (
                                                 <span className="flex items-center gap-1 text-red-600 font-semibold"><ArrowUpRight className="w-3 h-3"/> Sent</span>
@@ -183,7 +189,7 @@ const Analytics = () => {
                                             {p.note || '—'}
                                         </td>
                                         <td className={`px-4 py-3 text-right font-bold ${p.direction === 'sent' ? 'text-red-600' : 'text-emerald-600'}`}>
-                                            {p.direction === 'sent' ? '-' : '+'}₹{p.amount}
+                                            {p.direction === 'sent' ? '-' : '+'}₹{fmt(p.amount)}
                                         </td>
                                     </tr>
                                 ))}

@@ -63,7 +63,7 @@ const Groups = () => {
                     <div>
                         <p className="text-[0.65rem] font-bold text-gray-400 uppercase tracking-widest mb-1">Global Debt Tally</p>
                         {(() => {
-                            const total = groups.reduce((acc, g) => acc + (g.net_balance || 0), 0);
+                            const total = groups.reduce((acc, g) => acc + (parseFloat(g.net_balance) || 0), 0);
                             if (total > 0) return <h3 className="text-3xl font-light text-emerald-600 flex items-baseline gap-1"><span className="text-lg text-emerald-400 font-medium">₹</span>{total.toFixed(2)}</h3>;
                             if (total < 0) return <h3 className="text-3xl font-light text-red-600 flex items-baseline gap-1"><span className="text-lg text-red-400 font-medium">₹</span>{Math.abs(total).toFixed(2)}</h3>;
                             return <h3 className="text-3xl font-light text-gray-800 flex items-baseline gap-1">Settled Up</h3>;
@@ -106,17 +106,18 @@ const Groups = () => {
                         <div className="flex items-center gap-4">
                             <div className="text-right mr-4 hidden md:block">
                                 {(() => {
-                                    if (!group.net_balance) return <p className="text-sm font-medium text-gray-500">Settled Up</p>;
-                                    if (group.net_balance > 0) return (
+                                    const netBal = parseFloat(group.net_balance) || 0;
+                                    if (!netBal) return <p className="text-sm font-medium text-gray-500">Settled Up</p>;
+                                    if (netBal > 0) return (
                                         <>
                                             <p className="text-xs text-gray-400 font-medium">You get back</p>
-                                            <p className="text-sm font-bold text-emerald-600">₹{group.net_balance.toFixed(2)}</p>
+                                            <p className="text-sm font-bold text-emerald-600">₹{netBal.toFixed(2)}</p>
                                         </>
                                     );
-                                    if (group.net_balance < 0) return (
+                                    if (netBal < 0) return (
                                         <>
                                             <p className="text-xs text-gray-400 font-medium">You owe</p>
-                                            <p className="text-sm font-bold text-red-600">₹{Math.abs(group.net_balance).toFixed(2)}</p>
+                                            <p className="text-sm font-bold text-red-600">₹{Math.abs(netBal).toFixed(2)}</p>
                                         </>
                                     );
                                 })()}

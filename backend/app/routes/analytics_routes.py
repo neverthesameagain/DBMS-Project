@@ -19,17 +19,18 @@ def get_analytics():
     total_paid = 0.0
 
     for r in paid_rows:
+        amt = float(r.amount or 0)
         cat = r.category.category_name if r.category else 'General'
-        category_totals[cat] = category_totals.get(cat, 0) + float(r.amount)
-        total_paid += float(r.amount)
+        category_totals[cat] = category_totals.get(cat, 0) + amt
+        total_paid += amt
 
         if r.created_at:
             month_key = r.created_at.strftime('%b %Y')
-            monthly_totals[month_key] = monthly_totals.get(month_key, 0) + float(r.amount)
+            monthly_totals[month_key] = monthly_totals.get(month_key, 0) + amt
 
     # You are owed: rows where you paid but paid_for != you and not settled
     you_are_owed = sum(
-        float(r.amount)
+        float(r.amount or 0)
         for r in paid_rows
         if r.paid_for != current_user_id and not r.is_settled
     )
@@ -37,16 +38,21 @@ def get_analytics():
     # You owe: rows where paid_by != you but paid_for == you and not settled
     owed_rows = ExpenseSplitGroup.query.filter_by(paid_for=current_user_id, is_settled=False).all()
     you_owe = sum(
-        float(r.amount)
+        float(r.amount or 0)
         for r in owed_rows
         if r.paid_by != current_user_id
     )
 
-    sent_payments = Payment.query.filter_by(from_user_id=current_user_id).all()
-    total_sent = sum(float(p.amount) for p in sent_payments)
+    # Payment totals — filter to COMPLETED status only for accuracy
+    sent_payments = Payment.query.filter_by(
+        from_user_id=current_user_id, status='COMPLETED'
+    ).all()
+    total_sent = sum(float(p.amount or 0) for p in sent_payments)
 
-    received_payments = Payment.query.filter_by(to_user_id=current_user_id).all()
-    total_received = sum(float(p.amount) for p in received_payments)
+    received_payments = Payment.query.filter_by(
+        to_user_id=current_user_id, status='COMPLETED'
+    ).all()
+    total_received = sum(float(p.amount or 0) for p in received_payments)
 
     return jsonify({
         'category_breakdown': [

@@ -62,13 +62,13 @@ const Ledger = () => {
                                             {tx.entry_type}
                                         </span>
                                     </td>
-                                    <td className="px-6 py-4 font-bold text-gray-900">₹{parseFloat(tx.amount).toFixed(2)}</td>
+                                    <td className="px-6 py-4 font-bold text-gray-900">₹{(parseFloat(tx.amount) || 0).toFixed(2)}</td>
                                     <td className="px-6 py-4">
                                         {tx.category_name ? <span className="text-sm font-medium text-gray-600 bg-gray-100 px-2 py-0.5 rounded">{tx.category_name}</span> : <span className="text-gray-400">—</span>}
                                     </td>
                                     <td className="px-6 py-4 text-sm text-gray-700">{tx.from_name || <span className="text-gray-400">—</span>}</td>
                                     <td className="px-6 py-4 text-sm text-gray-700">{tx.to_name || <span className="text-gray-400">—</span>}</td>
-                                    <td className="px-6 py-4 text-sm text-gray-500">{new Date(tx.created_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</td>
+                                    <td className="px-6 py-4 text-sm text-gray-500">{tx.created_at ? new Date(tx.created_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '—'}</td>
                                     <td className="px-6 py-4 text-sm text-gray-600 truncate max-w-[200px]" title={tx.description}>{tx.description || <span className="text-gray-400">—</span>}</td>
                                 </tr>
                             ))}

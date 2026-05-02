@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import api from '../lib/api';
 import { useAuth } from '../context/AuthContext';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { Loader2, Plus, Receipt, Users } from 'lucide-react';
 
 const CATEGORIES = ['General', 'Food', 'Travel', 'Entertainment', 'Shopping', 'Utilities', 'Health'];
@@ -23,6 +23,8 @@ const GroupDetails = () => {
     const [splits, setSplits] = useState({});
     const [submitting, setSubmitting] = useState(false);
     const [expenseFormError, setExpenseFormError] = useState('');
+    const [recentPayments, setRecentPayments] = useState([]);
+    const [selectedPaymentId, setSelectedPaymentId] = useState('');
 
     // Add member
     const [newMemberEmail, setNewMemberEmail] = useState('');
@@ -44,11 +46,13 @@ const GroupDetails = () => {
                 api.get(`/api/groups/${groupId}/members`),
                 api.get(`/api/groups/${groupId}/expenses`),
                 api.get(`/api/groups/${groupId}/balances`),
+                api.get('/api/payments'),
             ]);
             setGroup(groupRes.data);
             setMembers(membersRes.data);
             setExpenses(expensesRes.data);
             setBalances(balancesRes.data);
+            setRecentPayments(paymentsRes.data.filter(p => p.direction === 'sent'));
 
             // Init equal splits
             const initSplits = {};
@@ -69,6 +73,7 @@ const GroupDetails = () => {
     const handleEqualSplit = () => {
         if (!amount || !members.length) return;
         const total = parseFloat(amount);
+        if (isNaN(total) || total <= 0) return;
         const share = parseFloat((total / members.length).toFixed(2));
         const newSplits = {};
         let running = 0;
@@ -86,29 +91,49 @@ const GroupDetails = () => {
     const submitExpense = async (e) => {
         e.preventDefault();
         setExpenseFormError('');
-        if (!amount || parseFloat(amount) <= 0) {
-            setExpenseFormError('Amount must be positive');
+        const parsedAmount = parseFloat(amount);
+        if (!amount || isNaN(parsedAmount) || parsedAmount <= 0) {
+            setExpenseFormError('Amount must be a positive number');
             return;
         }
+
+        // Build the splits payload — send actual amounts, not just IDs
+        const splitEntries = {};
+        let hasCustomAmounts = false;
+        for (const [uid, val] of Object.entries(splits)) {
+            const v = parseFloat(val || 0);
+            if (v > 0) {
+                splitEntries[uid] = v;
+                hasCustomAmounts = true;
+            }
+        }
+
+        if (!hasCustomAmounts) {
+            setExpenseFormError('Set the split amounts first (use "Split Equally" or enter custom amounts)');
+            return;
+        }
+
         setSubmitting(true);
         try {
             if (editExpenseId) {
                 await api.put(`/api/groups/${groupId}/expenses/${editExpenseId}`, {
-                    amount: parseFloat(amount),
+                    amount: parsedAmount,
                     description
                 });
             } else {
+                // Send splits as a dict of {user_id: amount} so the backend uses custom amounts
                 await api.post(`/api/groups/${groupId}/expenses`, {
-                    amount: parseFloat(amount),
+                    amount: parsedAmount,
                     description,
                     category,
-                    split_with: Object.keys(splits).map(Number).filter(id => parseFloat(splits[id] || 0) > 0),
+                    splits: splitEntries,
                 });
             }
             setShowExpenseForm(false);
             setEditExpenseId(null);
             setAmount('');
             setDescription('');
+            setSelectedPaymentId('');
             setExpenseFormError('');
             fetchAll();
         } catch (err) {
@@ -128,14 +153,10 @@ const GroupDetails = () => {
         }
     };
 
-    const handleSettle = async (paidToId) => {
-        try {
-            await api.post(`/api/groups/${groupId}/settle`, { paid_to: paidToId });
-            fetchAll();
-            alert('Debt settled successfully!');
-        } catch (err) {
-            alert('Failed to settle: ' + (err.response?.data?.error || err.message));
-        }
+    const navigate = useNavigate();
+
+    const handleSettle = (paidToId, owedAmount) => {
+        navigate(`/payments?groupId=${groupId}&settleUserId=${paidToId}&amount=${owedAmount}`);
     };
 
     const handleRoleChange = async (userId, newRole) => {
@@ -173,6 +194,15 @@ const GroupDetails = () => {
 
     if (loading) return <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
     if (error) return <div className="text-center p-12 text-red-600">{error}</div>;
+
+    // Safe total spending calculation — use total_amount from event objects
+    const totalSpending = expenses.reduce((sum, exp) => {
+        const val = parseFloat(exp.total_amount);
+        return sum + (isNaN(val) ? 0 : val);
+    }, 0);
+
+    // Compute the running split total to help the user
+    const splitTotal = Object.values(splits).reduce((s, v) => s + (parseFloat(v) || 0), 0);
 
     return (
         <div className="space-y-6">
@@ -213,7 +243,7 @@ const GroupDetails = () => {
                         <p className="text-[0.65rem] font-bold text-gray-400 uppercase tracking-widest mb-1">Total Spending</p>
                         <h3 className="text-3xl font-light text-gray-900 flex items-baseline gap-1">
                             <span className="text-lg text-gray-400 font-medium">₹</span>
-                            {expenses.reduce((sum, exp) => sum + parseFloat(exp.amount), 0).toFixed(2)}
+                            {totalSpending.toFixed(2)}
                         </h3>
                     </div>
                 </div>
@@ -222,7 +252,7 @@ const GroupDetails = () => {
                         <p className="text-[0.65rem] font-bold text-gray-400 uppercase tracking-widest mb-1">Your Share</p>
                         <h3 className="text-3xl font-light text-indigo-600 flex items-baseline gap-1">
                             <span className="text-lg text-indigo-400 font-medium">₹</span>
-                            {(balances.find(b => b.user_id === user?.user_id)?.total_paid || 0).toFixed(2)}
+                            {(parseFloat(balances.find(b => b.user_id === user?.user_id)?.total_paid) || 0).toFixed(2)}
                         </h3>
                     </div>
                 </div>
@@ -230,17 +260,18 @@ const GroupDetails = () => {
                     <div>
                         {(() => {
                             const myBal = balances.find(b => b.user_id === user?.user_id);
+                            const net = myBal ? parseFloat(myBal.net) || 0 : 0;
                             if (!myBal) return <><p className="text-[0.65rem] font-bold text-gray-400 uppercase tracking-widest mb-1">Status</p><h3 className="text-xl font-light text-gray-400 mt-1">No activity</h3></>;
-                            if (myBal.net > 0) return (
+                            if (net > 0) return (
                                 <>
                                     <p className="text-[0.65rem] font-bold text-gray-400 uppercase tracking-widest mb-1">Getting Back</p>
-                                    <h3 className="text-3xl font-light text-emerald-600 flex items-baseline gap-1"><span className="text-lg text-emerald-400 font-medium">₹</span>{myBal.net.toFixed(2)}</h3>
+                                    <h3 className="text-3xl font-light text-emerald-600 flex items-baseline gap-1"><span className="text-lg text-emerald-400 font-medium">₹</span>{net.toFixed(2)}</h3>
                                 </>
                             );
-                            if (myBal.net < 0) return (
+                            if (net < 0) return (
                                 <>
                                     <p className="text-[0.65rem] font-bold text-gray-400 uppercase tracking-widest mb-1">You Owe</p>
-                                    <h3 className="text-3xl font-light text-red-600 flex items-baseline gap-1"><span className="text-lg text-red-400 font-medium">₹</span>{Math.abs(myBal.net).toFixed(2)}</h3>
+                                    <h3 className="text-3xl font-light text-red-600 flex items-baseline gap-1"><span className="text-lg text-red-400 font-medium">₹</span>{Math.abs(net).toFixed(2)}</h3>
                                 </>
                             );
                             return (
@@ -268,10 +299,40 @@ const GroupDetails = () => {
                     <div className="card bg-gray-50 mb-8 border-indigo-100">
                         <h3 className="font-bold text-lg mb-4">{editExpenseId ? 'Edit Expense' : 'Add Expense'}</h3>
                         <form onSubmit={submitExpense} className="space-y-4">
-                            <div className="grid grid-cols-3 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                {!editExpenseId && recentPayments.length > 0 && (
+                                    <div className="md:col-span-3 mb-2">
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Split an existing payment? (Optional)</label>
+                                        <select 
+                                            className="input" 
+                                            value={selectedPaymentId} 
+                                            onChange={e => {
+                                                setSelectedPaymentId(e.target.value);
+                                                if (e.target.value) {
+                                                    const p = recentPayments.find(p => p.payment_id === parseInt(e.target.value));
+                                                    if (p) {
+                                                        setAmount(p.amount);
+                                                        setDescription(p.note || `Payment to ${p.to_name}`);
+                                                        if (p.category) setCategory(p.category);
+                                                    }
+                                                } else {
+                                                    setAmount('');
+                                                    setDescription('');
+                                                }
+                                            }}
+                                        >
+                                            <option value="">-- No, create manual expense --</option>
+                                            {recentPayments.map(p => (
+                                                <option key={p.payment_id} value={p.payment_id}>
+                                                    ₹{parseFloat(p.amount).toFixed(2)} to {p.to_name} ({new Date(p.created_at).toLocaleDateString()})
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700">Amount (₹)</label>
-                                    <input type="number" className="input" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} required />
+                                    <input type="number" step="0.01" min="0.01" className="input" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} required />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700">Description</label>
@@ -302,12 +363,20 @@ const GroupDetails = () => {
                                                     {member.user_id === user?.user_id && ' (you)'}
                                                 </span>
                                                 <input
-                                                    type="number" step="0.01" className="input text-right"
+                                                    type="number" step="0.01" min="0" className="input text-right"
                                                     value={splits[member.user_id] || ''}
                                                     onChange={e => setSplits({ ...splits, [member.user_id]: e.target.value })}
                                                 />
                                             </div>
                                         ))}
+                                        {/* Split total indicator */}
+                                        <div className="flex justify-between items-center pt-2 border-t border-gray-100 mt-2">
+                                            <span className="text-sm font-bold text-gray-700">Split Total</span>
+                                            <span className={`text-sm font-bold ${Math.abs(splitTotal - (parseFloat(amount) || 0)) < 0.02 ? 'text-emerald-600' : 'text-red-500'}`}>
+                                                ₹{splitTotal.toFixed(2)} / ₹{(parseFloat(amount) || 0).toFixed(2)}
+                                                {Math.abs(splitTotal - (parseFloat(amount) || 0)) >= 0.02 && ' ⚠️'}
+                                            </span>
+                                        </div>
                                     </div>
                                 </>
                             )}
@@ -391,8 +460,8 @@ const GroupDetails = () => {
                                             <p className="text-xs text-gray-500">Paid by {exp.payer_name}</p>
                                         </div>
                                         <div className="text-right">
-                                            <p className="font-bold text-gray-900">₹{exp.total_amount.toFixed(2)}</p>
-                                            <p className="text-[0.65rem] font-bold text-gray-400 uppercase tracking-widest mt-1">{new Date(exp.created_at).toLocaleDateString()}</p>
+                                            <p className="font-bold text-gray-900">₹{(parseFloat(exp.total_amount) || 0).toFixed(2)}</p>
+                                            <p className="text-[0.65rem] font-bold text-gray-400 uppercase tracking-widest mt-1">{exp.created_at ? new Date(exp.created_at).toLocaleDateString() : ''}</p>
                                         </div>
                                     </div>
                                     
@@ -406,10 +475,10 @@ const GroupDetails = () => {
                                             )}
                                         </div>
                                         <div className="space-y-1.5">
-                                            {exp.splits.map(s => (
+                                            {(exp.splits || []).map(s => (
                                                 <div key={s.expense_id} className="flex justify-between items-center text-xs">
                                                     <span className="text-gray-600">{s.debtor_name}</span>
-                                                    <span className="font-medium text-gray-900 truncate">₹{s.amount.toFixed(2)}</span>
+                                                    <span className="font-medium text-gray-900 truncate">₹{(parseFloat(s.amount) || 0).toFixed(2)}</span>
                                                 </div>
                                             ))}
                                         </div>
@@ -428,30 +497,52 @@ const GroupDetails = () => {
                 <h3 className="font-bold mb-4">Group Balances</h3>
                 <div className="space-y-3">
                     {balances.length === 0 && <p className="text-sm text-gray-500">No balance data tracked yet.</p>}
-                    {balances.map(b => (
-                        <div key={b.user_id} className="flex justify-between items-center p-3 border rounded-lg bg-gray-50">
-                            <span className="font-medium text-gray-900">{b.name} {b.user_id === user?.user_id && <span className="text-xs text-indigo-500 ml-1">(you)</span>}</span>
-                            <div className="flex items-center gap-4">
-                                <div className="text-right">
-                                    {b.net > 0 ? (
-                                        <span className="text-green-600 font-bold block">Owed ₹{b.net}</span>
-                                    ) : b.net < 0 ? (
-                                        <span className="text-red-600 font-bold block">Owes ₹{Math.abs(b.net)}</span>
-                                    ) : (
-                                        <span className="text-gray-500 font-bold block">Settled Up</span>
+                    {balances.map(b => {
+                        const net = parseFloat(b.net) || 0;
+                        const currentUserOwesThem = parseFloat(b.current_user_owes_them) || 0;
+                        const theyOweCurrentUser = parseFloat(b.they_owe_current_user) || 0;
+                        const isCurrentUser = b.user_id === user?.user_id;
+
+                        return (
+                            <div key={b.user_id} className="flex justify-between items-center p-3 border rounded-lg bg-gray-50">
+                                <div>
+                                    <span className="font-medium text-gray-900">
+                                        {b.name} {isCurrentUser && <span className="text-xs text-indigo-500 ml-1">(you)</span>}
+                                    </span>
+                                    {!isCurrentUser && (currentUserOwesThem > 0 || theyOweCurrentUser > 0) && (
+                                        <div className="text-xs text-gray-500 mt-0.5">
+                                            {currentUserOwesThem > 0 && (
+                                                <span className="text-red-500">You owe them ₹{currentUserOwesThem.toFixed(2)}</span>
+                                            )}
+                                            {currentUserOwesThem > 0 && theyOweCurrentUser > 0 && ' · '}
+                                            {theyOweCurrentUser > 0 && (
+                                                <span className="text-emerald-500">They owe you ₹{theyOweCurrentUser.toFixed(2)}</span>
+                                            )}
+                                        </div>
                                     )}
                                 </div>
-                                {b.net > 0 && b.user_id !== user?.user_id && (
-                                    <button 
-                                        onClick={() => handleSettle(b.user_id)} 
-                                        className="btn btn-primary text-xs py-1 px-3 mt-1"
-                                    >
-                                        Settle Debt
-                                    </button>
-                                )}
+                                <div className="flex items-center gap-4">
+                                    <div className="text-right">
+                                        {net > 0 ? (
+                                            <span className="text-green-600 font-bold block">Owed ₹{net.toFixed(2)}</span>
+                                        ) : net < 0 ? (
+                                            <span className="text-red-600 font-bold block">Owes ₹{Math.abs(net).toFixed(2)}</span>
+                                        ) : (
+                                            <span className="text-gray-500 font-bold block">Settled Up</span>
+                                        )}
+                                    </div>
+                                    {!isCurrentUser && currentUserOwesThem > 0 && (
+                                        <button 
+                                            onClick={() => handleSettle(b.user_id, currentUserOwesThem)} 
+                                            className="btn btn-primary text-xs py-1 px-3"
+                                        >
+                                            Settle ₹{currentUserOwesThem.toFixed(2)}
+                                        </button>
+                                    )}
+                                </div>
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             </div>
         </div>
