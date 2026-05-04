@@ -168,19 +168,19 @@ CREATE TABLE future_expense (
 );
 
 -- =============================================================
-CREATE INDEX idx_group_members_group  ON group_members(group_id);
-CREATE INDEX idx_group_members_user   ON group_members(user_id);
-CREATE INDEX idx_esg_group            ON expense_split_group(group_id);
-CREATE INDEX idx_esg_paid_by          ON expense_split_group(paid_by);
-CREATE INDEX idx_esg_paid_for         ON expense_split_group(paid_for);
-CREATE INDEX idx_payment_from         ON payment(from_user_id);
-CREATE INDEX idx_payment_to           ON payment(to_user_id);
-CREATE INDEX idx_future_user          ON future_expense(user_id);
-CREATE INDEX idx_upi_user             ON upi_id(user_id);
-CREATE INDEX idx_pes_user             ON personal_expense_split(user_id);
-CREATE INDEX idx_trans_type           ON transactions(transaction_type, created_at);
-CREATE INDEX idx_trans_ref            ON transactions(reference_id);
-CREATE INDEX idx_payment_txn          ON payment(transaction_id);
+CREATE INDEX idx_group_members_group  ON group_members USING HASH(group_id);
+CREATE INDEX idx_group_members_user   ON group_members USING HASH(user_id);
+CREATE INDEX idx_esg_group            ON expense_split_group USING HASH(group_id);
+CREATE INDEX idx_esg_paid_by          ON expense_split_group USING HASH(paid_by);
+CREATE INDEX idx_esg_paid_for         ON expense_split_group USING HASH(paid_for);
+CREATE INDEX idx_payment_from         ON payment USING HASH(from_user_id);
+CREATE INDEX idx_payment_to           ON payment USING HASH(to_user_id);
+CREATE INDEX idx_future_user          ON future_expense USING HASH(user_id);
+CREATE INDEX idx_upi_user             ON upi_id USING HASH(user_id);
+CREATE INDEX idx_pes_user             ON personal_expense_split USING HASH(user_id);
+CREATE INDEX idx_trans_type           ON transactions(transaction_type, created_at); -- B-Tree for sorting
+CREATE INDEX idx_trans_ref            ON transactions USING HASH(reference_id);
+CREATE INDEX idx_payment_txn          ON payment USING HASH(transaction_id);
 
 
 -- =============================================================
