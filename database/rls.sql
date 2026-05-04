@@ -31,6 +31,11 @@ RETURNS BOOLEAN AS $$
     SELECT current_setting('app.role', true) = 'ADMIN';
 $$ LANGUAGE sql STABLE;
 
+CREATE OR REPLACE FUNCTION app_is_banker()
+RETURNS BOOLEAN AS $$
+    SELECT current_setting('app.role', true) = 'BANKER';
+$$ LANGUAGE sql STABLE;
+
 ALTER TABLE group_members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE expense_split_group ENABLE ROW LEVEL SECURITY;
 ALTER TABLE payment ENABLE ROW LEVEL SECURITY;
@@ -141,6 +146,7 @@ ON payment
 FOR SELECT
 USING (
     app_is_admin()
+    OR app_is_banker()
     OR from_user_id = app_user_id()
     OR to_user_id = app_user_id()
 );

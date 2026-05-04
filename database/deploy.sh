@@ -14,7 +14,17 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [ -z "${DATABASE_URL:-}" ]; then
-    echo "❌ Error: DATABASE_URL is not set"
+    echo "⚠️ DATABASE_URL is not set in environment."
+    ENV_FILE="$SCRIPT_DIR/../backend/.env"
+    if [ -f "$ENV_FILE" ]; then
+        echo "🔍 Found backend/.env, extracting DATABASE_URL..."
+        # Extract DATABASE_URL, ignoring comments and stripping quotes
+        export DATABASE_URL=$(grep -v '^#' "$ENV_FILE" | grep 'DATABASE_URL=' | sed 's/^DATABASE_URL=//' | tr -d '"'\''')
+    fi
+fi
+
+if [ -z "${DATABASE_URL:-}" ]; then
+    echo "❌ Error: DATABASE_URL is not set and could not be found in backend/.env"
     echo "   export DATABASE_URL='postgresql://user:pass@host/db?sslmode=require'"
     exit 1
 fi
@@ -32,16 +42,17 @@ run_sql_file() {
     echo "✅ $label — OK"
 }
 
-run_sql_file "[1/6] schema.sql" "$SCRIPT_DIR/schema.sql"
-run_sql_file "[2/6] functions.sql" "$SCRIPT_DIR/functions.sql"
-run_sql_file "[3/6] triggers.sql" "$SCRIPT_DIR/triggers.sql"
-run_sql_file "[4/6] views.sql" "$SCRIPT_DIR/views.sql"
-run_sql_file "[5/6] rls.sql" "$SCRIPT_DIR/rls.sql"
+run_sql_file "[1/7] schema.sql" "$SCRIPT_DIR/schema.sql"
+run_sql_file "[2/7] functions.sql" "$SCRIPT_DIR/functions.sql"
+run_sql_file "[3/7] triggers.sql" "$SCRIPT_DIR/triggers.sql"
+run_sql_file "[4/7] views.sql" "$SCRIPT_DIR/views.sql"
+run_sql_file "[5/7] rls.sql" "$SCRIPT_DIR/rls.sql"
+run_sql_file "[6/7] roles.sql" "$SCRIPT_DIR/roles.sql"
 
 if [ -f "$SCRIPT_DIR/seed.sql" ]; then
-    run_sql_file "[6/6] seed.sql" "$SCRIPT_DIR/seed.sql"
+    run_sql_file "[7/7] seed.sql" "$SCRIPT_DIR/seed.sql"
 else
-    echo "📋 [6/6] seed.sql not found — skipping"
+    echo "📋 [7/7] seed.sql not found — skipping"
 fi
 
 echo ""

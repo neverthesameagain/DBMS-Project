@@ -17,6 +17,10 @@ const ProtectedRoute = ({ children, userOnly = false }) => {
     return <Navigate to="/admin" />;
   }
 
+  if (userOnly && user.role === 'BANKER') {
+    return <Navigate to="/banker" />;
+  }
+
   return <Layout>{children}</Layout>;
 };
 
@@ -30,6 +34,22 @@ const AdminRoute = ({ children }) => {
   }
 
   if (user.role !== 'ADMIN') {
+    return <Navigate to="/" />;
+  }
+
+  return <Layout>{children}</Layout>;
+};
+
+const BankerRoute = ({ children }) => {
+  const { user, loading } = useAuth();
+
+  if (loading) return <div>Loading...</div>;
+
+  if (!user) {
+    return <Navigate to="/login" />;
+  }
+
+  if (user.role !== 'BANKER') {
     return <Navigate to="/" />;
   }
 
@@ -51,6 +71,7 @@ import AdminUsers from './admin/AdminUsers';
 import AdminTransactions from './admin/AdminTransactions';
 import AdminTables from './admin/AdminTables';
 import AdminQueryEngine from './admin/AdminQueryEngine';
+import BankerDashboard from './pages/BankerDashboard';
 
 function App() {
   return (
@@ -114,6 +135,10 @@ function App() {
 
           <Route path="/admin/query" element={
             <AdminRoute><AdminQueryEngine /></AdminRoute>
+          } />
+
+          <Route path="/banker" element={
+            <BankerRoute><BankerDashboard /></BankerRoute>
           } />
 
           {/* Redirect unknown routes */}

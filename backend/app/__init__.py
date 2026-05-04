@@ -46,8 +46,8 @@ def create_app():
 
     # CORS: restrict /api/* to FRONTEND_URL (comma-separated). In production,
     # localhost defaults are not used — set FRONTEND_URL on the host.
-    dev_origins = ["http://localhost:5173", "http://localhost:5174",
-                   "http://127.0.0.1:5173", "http://127.0.0.1:5174"]
+    dev_origins = ["http://localhost:5173", "http://localhost:5174", "http://localhost:5175", "http://localhost:5176",
+                   "http://127.0.0.1:5173", "http://127.0.0.1:5174", "http://127.0.0.1:5175", "http://127.0.0.1:5176"]
     env_origins = os.environ.get("FRONTEND_URL", "").strip()
     is_dev = os.environ.get("FLASK_ENV", "").lower() == "development"
     parsed = [o.strip() for o in env_origins.split(",") if o.strip()]
@@ -143,6 +143,7 @@ def create_app():
     from app.routes.upi_routes import upi_bp
     from app.routes.personal_expense_routes import budget_bp
     from app.routes.admin_routes import admin_bp
+    from app.routes.banker_routes import banker_bp
 
     app.register_blueprint(auth_bp,      url_prefix='/api/auth')
     app.register_blueprint(user_bp,      url_prefix='/api/users')
@@ -156,6 +157,7 @@ def create_app():
     app.register_blueprint(upi_bp,       url_prefix='/api/upi')
     app.register_blueprint(budget_bp,    url_prefix='/api/budgets')
     app.register_blueprint(admin_bp,     url_prefix='/api/admin')
+    app.register_blueprint(banker_bp,    url_prefix='/api')
 
     _require_postgres_role_enforces_rls(app)
 

@@ -31,6 +31,18 @@ The Flask app **refuses to start** if `DATABASE_URL` connects as a role with `ro
 
 ---
 
+## PostgreSQL Roles (Evaluation/Demo)
+
+To satisfy strict DBMS evaluation criteria, the system implements both **Row-Level Security (RLS)** and **pgAdmin-level PostgreSQL Roles**.
+
+* **Database Roles (`app_user`, `app_banker`, `app_admin`)**: These are true PostgreSQL roles created via `CREATE ROLE`. They possess explicit `GRANT` privileges over tables, sequences, and functions. They exist purely for **demonstration and evaluation** (e.g., executing queries in pgAdmin via `SET ROLE`).
+* **Runtime Role (`splitzy_app`)**: The backend connects to the database using this single role. Connection pooling (e.g., PgBouncer) requires a unified connection role rather than per-user DB connections.
+* **Application Roles**: The actual role of the logged-in user (USER, ADMIN, BANKER) is stored in the `users.role` column. The backend securely passes this context to the DB per-request using `SET app.role = '...'`. RLS policies then restrict data access based on this context.
+
+This hybrid architecture cleanly demonstrates pure SQL privilege grants while maintaining a modern, scalable web application backend.
+
+---
+
 ## Database Schema Overview
 
 ```

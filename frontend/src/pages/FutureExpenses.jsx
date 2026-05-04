@@ -116,33 +116,32 @@ const FutureExpenses = () => {
                     </button>
                 </form>
             </div>
-
             {/* Pending */}
             {pending.length > 0 && (
                 <div className="space-y-4">
                     <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mt-8 mb-4">Upcoming</h3>
                     <div className="grid gap-3">
                         {pending.map(exp => (
-                            <div key={exp.future_id} className="bg-white rounded-2xl shadow-sm border border-l-4 border-blue-400 border-y-gray-100 border-r-gray-100 p-5 flex justify-between items-center transition-shadow hover:shadow-md">
+                            <div key={exp.future_expense_id} className="bg-white rounded-2xl shadow-sm border border-l-4 border-blue-400 border-y-gray-100 border-r-gray-100 p-5 flex justify-between items-center transition-shadow hover:shadow-md">
                                 <div>
                                     <div className="flex items-center gap-3 mb-1">
-                                        <h4 className="font-bold text-gray-900">{exp.title}</h4>
+                                        <h4 className="font-bold text-gray-900">{exp.category_name} Plan</h4>
                                         <span className="px-2 py-0.5 rounded text-xs font-semibold bg-yellow-100 text-yellow-800">
-                                            {exp.category}
+                                            {exp.category_name}
                                         </span>
                                     </div>
                                     <p className="text-sm text-gray-500 flex items-center gap-1">
                                         <Calendar className="w-4 h-4" />
-                                        {exp.due_date ? `Due: ${new Date(exp.due_date).toLocaleDateString()}` : 'No specific due date'}
+                                        {exp.expected_date ? `Due: ${new Date(exp.expected_date).toLocaleDateString()}` : 'No specific due date'}
                                     </p>
                                 </div>
                                 <div className="flex items-center gap-4">
                                     <span className="font-bold text-xl text-gray-900">₹{exp.estimated_amount}</span>
                                     <div className="flex gap-2">
-                                        <button onClick={() => handleComplete(exp.future_id)} className="p-2 bg-green-50 text-green-600 rounded hover:bg-green-100 transition-colors" title="Mark Done">
+                                        <button onClick={() => handleComplete(exp.future_expense_id)} className="p-2 bg-green-50 text-green-600 rounded hover:bg-green-100 transition-colors" title="Mark Done">
                                             <CheckCircle className="w-5 h-5" />
                                         </button>
-                                        <button onClick={() => handleDelete(exp.future_id)} className="p-2 bg-red-50 text-red-500 rounded hover:bg-red-100 transition-colors" title="Delete">
+                                        <button onClick={() => handleDelete(exp.future_expense_id)} className="p-2 bg-red-50 text-red-500 rounded hover:bg-red-100 transition-colors" title="Delete">
                                             <Trash2 className="w-5 h-5" />
                                         </button>
                                     </div>
@@ -159,14 +158,14 @@ const FutureExpenses = () => {
                     <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mt-8 mb-4">Completed</h3>
                     <div className="grid gap-3">
                         {done.map(exp => (
-                            <div key={exp.future_id} className="bg-white rounded-2xl border border-gray-100 p-5 opacity-60 flex justify-between items-center">
+                            <div key={exp.future_expense_id} className="bg-white rounded-2xl border border-gray-100 p-5 opacity-60 flex justify-between items-center">
                                 <div>
-                                    <h4 className="font-bold line-through">{exp.title}</h4>
-                                    <p className="text-sm text-gray-500">{exp.category}</p>
+                                    <h4 className="font-bold line-through">{exp.category_name} Plan</h4>
+                                    <p className="text-sm text-gray-500">{exp.category_name}</p>
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <span className="font-bold text-lg">₹{exp.estimated_amount}</span>
-                                    <button onClick={() => handleDelete(exp.future_id)} className="p-2 bg-red-50 text-red-600 rounded hover:bg-red-100" title="Delete">
+                                    <button onClick={() => handleDelete(exp.future_expense_id)} className="p-2 bg-red-50 text-red-600 rounded hover:bg-red-100" title="Delete">
                                         <Trash2 className="w-4 h-4" />
                                     </button>
                                 </div>

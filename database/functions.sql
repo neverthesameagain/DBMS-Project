@@ -217,3 +217,55 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+
+
+-- =============================================================
+-- ROLE-ENFORCED FUNCTIONS
+-- =============================================================
+
+-- 1. USER: get_user_balance
+CREATE OR REPLACE FUNCTION get_user_balance(p_user_id INT)
+RETURNS NUMERIC AS $$
+DECLARE
+    v_balance NUMERIC;
+BEGIN
+    IF app_user_id() != p_user_id AND NOT app_is_admin() AND NOT app_is_banker() THEN
+        RAISE EXCEPTION 'Access Denied: You can only view your own balance.';
+    END IF;
+
+    SELECT current_balance INTO v_balance FROM users WHERE user_id = p_user_id;
+    RETURN v_balance;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 2. ADMIN: deactivate_user
+CREATE OR REPLACE FUNCTION deactivate_user(p_user_id INT)
+RETURNS BOOLEAN AS $$
+BEGIN
+    IF NOT app_is_admin() THEN
+        RAISE EXCEPTION 'Access Denied: Only ADMIN can deactivate users.';
+    END IF;
+
+    UPDATE users SET is_active = FALSE WHERE user_id = p_user_id;
+    RETURN TRUE;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 3. BANKER: adjust_balance
+CREATE OR REPLACE FUNCTION adjust_balance(p_user_id INT, p_amount NUMERIC)
+RETURNS NUMERIC AS $$
+DECLARE
+    v_new_balance NUMERIC;
+BEGIN
+    IF NOT app_is_banker() THEN
+        RAISE EXCEPTION 'Access Denied: Only BANKER can manually adjust funds.';
+    END IF;
+
+    UPDATE users 
+    SET current_balance = current_balance + p_amount 
+    WHERE user_id = p_user_id 
+    RETURNING current_balance INTO v_new_balance;
+
+    RETURN v_new_balance;
+END;
+$$ LANGUAGE plpgsql;

@@ -179,6 +179,8 @@ CREATE INDEX idx_future_user          ON future_expense(user_id);
 CREATE INDEX idx_upi_user             ON upi_id(user_id);
 CREATE INDEX idx_pes_user             ON personal_expense_split(user_id);
 CREATE INDEX idx_trans_type           ON transactions(transaction_type, created_at);
+CREATE INDEX idx_trans_ref            ON transactions(reference_id);
+CREATE INDEX idx_payment_txn          ON payment(transaction_id);
 
 
 -- =============================================================

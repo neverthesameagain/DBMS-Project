@@ -63,3 +63,16 @@ FROM group_members gm
 JOIN users u ON u.user_id = gm.user_id
 LEFT JOIN expense_split_group esg ON esg.group_id = gm.group_id AND (esg.paid_by = u.user_id OR esg.paid_for = u.user_id)
 GROUP BY gm.group_id, u.user_id, u.first_name, u.last_name;
+
+
+-- =============================================================
+-- VIEW: admin_system_overview
+-- Provides a high-level summary of system financial health.
+-- Only accessible by ADMIN/BANKER implicitly or via role checks.
+-- =============================================================
+CREATE OR REPLACE VIEW admin_system_overview AS
+SELECT
+    (SELECT COUNT(*) FROM users WHERE is_active = TRUE) AS total_active_users,
+    (SELECT COALESCE(SUM(current_balance), 0) FROM users WHERE is_active = TRUE) AS total_system_capital,
+    (SELECT COALESCE(SUM(amount), 0) FROM payment WHERE status = 'COMPLETED') AS total_payment_volume,
+    (SELECT COALESCE(SUM(amount), 0) FROM expense_split_group WHERE is_settled = FALSE) AS total_active_debt;

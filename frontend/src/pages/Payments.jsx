@@ -16,6 +16,8 @@ const Payments = () => {
     const [paymentType, setPaymentType] = useState('PERSONAL');
     const [selectedGroupId, setSelectedGroupId] = useState('');
     const [groupActionMode, setGroupActionMode] = useState('SETTLE'); // 'SETTLE' | 'EXPENSE'
+    const [splitMode, setSplitMode] = useState('EQUAL'); // 'EQUAL' | 'CUSTOM'
+    const [customSplits, setCustomSplits] = useState({});
 
     const [searchParams] = useSearchParams();
 
@@ -200,15 +202,20 @@ const Payments = () => {
                 payment_type: paymentType,
                 group_id: paymentType === 'GROUP' ? selectedGroupId : null,
             });
-            // If "Pay & Split", also create an equal split group expense
+            // If "Pay & Split", also create a group expense
             if (paymentType === 'GROUP' && groupActionMode === 'EXPENSE' && selectedGroupId) {
                 try {
-                    await api.post(`/api/groups/${selectedGroupId}/expenses`, {
+                    const payload = {
                         amount: Math.round(parsedAmount * 100) / 100,
                         description: note || 'Paid & Split via Payments',
                         category: category || 'General',
-                        // split_with empty triggers equal split among all group members in backend
-                    });
+                    };
+
+                    if (splitMode === 'CUSTOM') {
+                        payload.splits = customSplits;
+                    }
+
+                    await api.post(`/api/groups/${selectedGroupId}/expenses`, payload);
                 } catch (expErr) {
                     console.error('Failed to create split for payment:', expErr);
                     alert('Payment sent, but failed to automatically create the group split.');
@@ -293,7 +300,7 @@ const Payments = () => {
                         <div>
                             <div className="flex bg-gray-50 p-1 rounded-xl mb-3">
                                 <button type="button" onClick={() => { setPaymentType('PERSONAL'); setSelectedGroupId(''); }} className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${paymentType === 'PERSONAL' ? 'bg-white shadow-sm text-gray-900 border border-gray-100' : 'text-gray-500 hover:text-gray-700'}`}>Personal Transfer</button>
-                                <button type="button" onClick={() => setPaymentType('GROUP')} className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${paymentType === 'GROUP' ? 'bg-white shadow-sm text-gray-900 border border-gray-100' : 'text-gray-500 hover:text-gray-700'}`}>Group Settlement</button>
+                                <button type="button" onClick={() => setPaymentType('GROUP')} className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${paymentType === 'GROUP' ? 'bg-white shadow-sm text-gray-900 border border-gray-100' : 'text-gray-500 hover:text-gray-700'}`}>Paying for someone else</button>
                             </div>
                             
                             {paymentType === 'GROUP' && (
@@ -306,8 +313,8 @@ const Payments = () => {
                                     </select>
                                     {/* Sub-toggle for Group Action Mode */}
                                     <div className="flex bg-gray-100 p-1 rounded-lg mb-4 mt-2 max-w-xs mx-auto">
-                                        <button type="button" onClick={() => setGroupActionMode('SETTLE')} className={`flex-1 py-1 text-xs font-medium rounded transition-all ${groupActionMode === 'SETTLE' ? 'bg-white shadow-sm text-gray-900 border border-gray-200' : 'text-gray-500'}`}>Settle Existing Debt</button>
-                                        <button type="button" onClick={() => setGroupActionMode('EXPENSE')} className={`flex-1 py-1 text-xs font-medium rounded transition-all ${groupActionMode === 'EXPENSE' ? 'bg-white shadow-sm text-gray-900 border border-gray-200' : 'text-gray-500'}`}>Pay & Split Equally</button>
+                                        <button type="button" onClick={() => setGroupActionMode('SETTLE')} className={`flex-1 py-1 text-xs font-medium rounded transition-all ${groupActionMode === 'SETTLE' ? 'bg-white shadow-sm text-gray-900 border border-gray-200' : 'text-gray-500'}`}>Settling existing</button>
+                                        <button type="button" onClick={() => setGroupActionMode('EXPENSE')} className={`flex-1 py-1 text-xs font-medium rounded transition-all ${groupActionMode === 'EXPENSE' ? 'bg-white shadow-sm text-gray-900 border border-gray-200' : 'text-gray-500'}`}>Group payment</button>
                                     </div>
 
                                     {/* Show group debts when SETTLE is selected */}
@@ -337,6 +344,44 @@ const Payments = () => {
                                                             </button>
                                                         );
                                                     })}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Custom split options when EXPENSE is selected */}
+                                    {selectedGroupId && groupActionMode === 'EXPENSE' && (
+                                        <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 mb-2">
+                                            <div className="flex bg-white p-1 rounded-lg mb-3 shadow-sm border border-gray-200">
+                                                <button type="button" onClick={() => setSplitMode('EQUAL')} className={`flex-1 py-1 text-xs font-bold rounded ${splitMode === 'EQUAL' ? 'bg-blue-50 text-blue-700' : 'text-gray-500'}`}>Split Equally</button>
+                                                <button type="button" onClick={() => setSplitMode('CUSTOM')} className={`flex-1 py-1 text-xs font-bold rounded ${splitMode === 'CUSTOM' ? 'bg-blue-50 text-blue-700' : 'text-gray-500'}`}>Custom Split</button>
+                                            </div>
+
+                                            {splitMode === 'CUSTOM' && (
+                                                <div className="space-y-2 mt-3">
+                                                    <p className="text-[0.65rem] font-bold text-gray-400 uppercase tracking-widest mb-2">Specify who owes how much</p>
+                                                    {groupBalances.map(member => (
+                                                        <div key={member.user_id} className="flex justify-between items-center bg-white p-2 rounded border border-gray-200">
+                                                            <span className="text-sm font-medium text-gray-900">{member.name} {member.user_id === user?.user_id && "(You)"}</span>
+                                                            <div className="flex items-center">
+                                                                <span className="text-gray-400 text-sm mr-1">₹</span>
+                                                                <input
+                                                                    type="number"
+                                                                    step="0.01"
+                                                                    min="0"
+                                                                    placeholder="0.00"
+                                                                    className="w-20 text-right p-1 text-sm border border-gray-200 rounded focus:outline-none focus:border-blue-400"
+                                                                    value={customSplits[member.user_id] || ''}
+                                                                    onChange={(e) => {
+                                                                        setCustomSplits(prev => ({
+                                                                            ...prev,
+                                                                            [member.user_id]: e.target.value
+                                                                        }));
+                                                                    }}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    ))}
                                                 </div>
                                             )}
                                         </div>

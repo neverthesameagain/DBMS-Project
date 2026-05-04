@@ -21,10 +21,10 @@ def get_stats():
     paid_rows = ExpenseSplitGroup.query.filter_by(paid_by=current_user_id, is_settled=False).all()
     you_are_owed = sum(float(r.amount or 0) for r in paid_rows if r.paid_for != current_user_id)
 
-    # Monthly spend: your expense rows this calendar month
+    # Monthly spend: your personal liability (what you owe others for expenses)
     now = datetime.now(timezone.utc)
     monthly_rows = ExpenseSplitGroup.query.filter(
-        ExpenseSplitGroup.paid_by == current_user_id,
+        ExpenseSplitGroup.paid_for == current_user_id,
         db.extract('month', ExpenseSplitGroup.created_at) == now.month,
         db.extract('year',  ExpenseSplitGroup.created_at) == now.year,
     ).all()
@@ -34,6 +34,20 @@ def get_stats():
     for r in monthly_rows:
         cat_name = r.category.category_name if r.category else 'General'
         category_breakdown[cat_name] = round(category_breakdown.get(cat_name, 0.0) + float(r.amount or 0), 2)
+        
+    # Also include direct personal payments (e.g. paying for groceries directly via Send Money)
+    personal_payments = Payment.query.filter(
+        Payment.from_user_id == current_user_id,
+        Payment.payment_type == 'PERSONAL',
+        Payment.status == 'COMPLETED',
+        db.extract('month', Payment.created_at) == now.month,
+        db.extract('year',  Payment.created_at) == now.year,
+    ).all()
+    
+    for p in personal_payments:
+        monthly_spend += float(p.amount or 0)
+        cat_name = p.category.category_name if p.category else 'General'
+        category_breakdown[cat_name] = round(category_breakdown.get(cat_name, 0.0) + float(p.amount or 0), 2)
 
     # Active Groups
     memberships = GroupMember.query.filter_by(user_id=current_user_id).all()

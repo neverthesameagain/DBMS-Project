@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Database, LayoutDashboard, Users, PieChart, Wallet, LogOut, User, Calendar, ReceiptText, TerminalSquare } from 'lucide-react';
+import { Database, LayoutDashboard, Users, PieChart, Wallet, LogOut, User, Calendar, ReceiptText, TerminalSquare, Activity } from 'lucide-react';
 import clsx from 'clsx';
 
 const Layout = ({ children }) => {
@@ -16,6 +16,7 @@ const Layout = ({ children }) => {
         { icon: PieChart, label: 'Budgets', path: '/budgets' },
         { icon: Wallet, label: 'Payments', path: '/payments' },
         { icon: Calendar, label: 'Ledger', path: '/ledger' },
+        { icon: ReceiptText, label: 'Future', path: '/future' },
         { icon: User, label: 'Profile', path: '/profile' },
     ];
 
@@ -27,7 +28,14 @@ const Layout = ({ children }) => {
         { icon: TerminalSquare, label: 'Query', path: '/admin/query' },
     ];
 
-    const navItems = user?.role === 'ADMIN' ? adminNavItems : userNavItems;
+    let navItems = userNavItems;
+    if (user?.role === 'ADMIN') {
+        navItems = adminNavItems;
+    } else if (user?.role === 'BANKER') {
+        navItems = [
+            { icon: Activity, label: 'Banker UI', path: '/banker' }
+        ];
+    }
 
     return (
         <div className="flex h-screen bg-gray-50">
