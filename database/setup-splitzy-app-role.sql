@@ -19,3 +19,6 @@ GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO splitzy_app;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO splitzy_app;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO splitzy_app;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO splitzy_app;
+
+-- After adding tables/views/functions later, re-apply table grants so splitzy_app keeps access:
+--   psql "$OWNER_URL" -v ON_ERROR_STOP=1 -f database/patches/grant_splitzy_app_privileges.sql

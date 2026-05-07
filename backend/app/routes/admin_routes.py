@@ -161,8 +161,11 @@ def update_user(user_id):
         return jsonify({"error": "User not found"}), 404
 
     if 'role' in data:
-        if data['role'] not in {'USER', 'ADMIN'}:
-            return jsonify({"error": "Invalid role"}), 400
+        allowed_roles = {'USER', 'ADMIN', 'BANKER'}
+        if data['role'] not in allowed_roles:
+            return jsonify({"error": "Invalid role. Use USER, ADMIN, or BANKER."}), 400
+        if admin.user_id == user_id and data['role'] != 'ADMIN':
+            return jsonify({"error": "You cannot remove your own admin role"}), 400
         user.role = data['role']
 
     if 'is_active' in data:

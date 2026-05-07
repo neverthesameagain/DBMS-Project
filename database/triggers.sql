@@ -5,13 +5,24 @@
 -- These triggers make PostgreSQL the source of truth for ledger and
 -- balance correctness: every payment/expense insert enforces its own
 -- transaction side effect, independent of backend behavior.
+--
+-- Suppresses benign "trigger does not exist" notices when re-running after schema.sql.
 -- =============================================================
+
+SET client_min_messages TO WARNING;
 
 DROP TRIGGER IF EXISTS trg_set_initial_balance ON users;
 CREATE TRIGGER trg_set_initial_balance
     BEFORE INSERT ON users
     FOR EACH ROW
     EXECUTE FUNCTION set_initial_balance();
+
+
+DROP TRIGGER IF EXISTS trg_staff_no_wallet_balance ON users;
+CREATE TRIGGER trg_staff_no_wallet_balance
+    BEFORE UPDATE ON users
+    FOR EACH ROW
+    EXECUTE FUNCTION enforce_staff_no_wallet_balance();
 
 
 DROP TRIGGER IF EXISTS trg_payment_transaction ON payment;
@@ -65,3 +76,5 @@ CREATE TRIGGER trg_prevent_negative_balance
     BEFORE UPDATE OF current_balance ON users
     FOR EACH ROW
     EXECUTE FUNCTION prevent_negative_balance();
+
+RESET client_min_messages;

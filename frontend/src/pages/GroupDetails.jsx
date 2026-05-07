@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import api from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Loader2, Plus, Receipt, Users } from 'lucide-react';
+import { Loader2, Plus, Receipt, Users, ArrowRightCircle } from 'lucide-react';
 
 const CATEGORIES = ['General', 'Food', 'Travel', 'Entertainment', 'Shopping', 'Utilities', 'Health'];
 
@@ -41,7 +41,7 @@ const GroupDetails = () => {
 
     const fetchAll = async () => {
         try {
-            const [groupRes, membersRes, expensesRes, balancesRes] = await Promise.all([
+            const [groupRes, membersRes, expensesRes, balancesRes, paymentsRes] = await Promise.all([
                 api.get(`/api/groups/${groupId}`),
                 api.get(`/api/groups/${groupId}/members`),
                 api.get(`/api/groups/${groupId}/expenses`),
@@ -52,11 +52,12 @@ const GroupDetails = () => {
             setMembers(membersRes.data);
             setExpenses(expensesRes.data);
             setBalances(balancesRes.data);
-            setRecentPayments(paymentsRes.data.filter(p => p.direction === 'sent'));
+            setRecentPayments((paymentsRes.data || []).filter((p) => p.direction === 'sent'));
 
-            // Init equal splits
             const initSplits = {};
-            membersRes.data.forEach(m => { initSplits[m.user_id] = 0; });
+            membersRes.data.forEach((m) => {
+                initSplits[m.user_id] = 0;
+            });
             setSplits(initSplits);
         } catch {
             setError('Failed to load group details.');
@@ -492,58 +493,153 @@ const GroupDetails = () => {
                 </div>
             </div>
 
-            {/* Balances Sheet */}
-            <div className="card mt-6">
-                <h3 className="font-bold mb-4">Group Balances</h3>
-                <div className="space-y-3">
-                    {balances.length === 0 && <p className="text-sm text-gray-500">No balance data tracked yet.</p>}
-                    {balances.map(b => {
-                        const net = parseFloat(b.net) || 0;
-                        const currentUserOwesThem = parseFloat(b.current_user_owes_them) || 0;
-                        const theyOweCurrentUser = parseFloat(b.they_owe_current_user) || 0;
-                        const isCurrentUser = b.user_id === user?.user_id;
+            {/* Balances — simplified "who owes whom" + settle */}
+            <div className="card mt-6 overflow-hidden">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-6">
+                    <div>
+                        <h3 className="font-bold text-gray-900 text-lg">Balances</h3>
+                        <p className="text-sm text-gray-500 mt-0.5">
+                            Net amounts from unsettled splits in this group only.
+                        </p>
+                    </div>
+                </div>
+
+                {balances.length === 0 ? (
+                    <p className="text-sm text-gray-500">No balance data yet.</p>
+                ) : (
+                    (() => {
+                        const mine = balances.find((b) => b.user_id === user?.user_id);
+                        const others = balances.filter((b) => b.user_id !== user?.user_id);
+                        const iOwe = others.filter((b) => (parseFloat(b.current_user_owes_them) || 0) > 0);
+                        const oweMe = others.filter((b) => (parseFloat(b.they_owe_current_user) || 0) > 0);
+                        const nothingForYou = iOwe.length === 0 && oweMe.length === 0;
 
                         return (
-                            <div key={b.user_id} className="flex justify-between items-center p-3 border rounded-lg bg-gray-50">
-                                <div>
-                                    <span className="font-medium text-gray-900">
-                                        {b.name} {isCurrentUser && <span className="text-xs text-indigo-500 ml-1">(you)</span>}
-                                    </span>
-                                    {!isCurrentUser && (currentUserOwesThem > 0 || theyOweCurrentUser > 0) && (
-                                        <div className="text-xs text-gray-500 mt-0.5">
-                                            {currentUserOwesThem > 0 && (
-                                                <span className="text-red-500">You owe them ₹{currentUserOwesThem.toFixed(2)}</span>
-                                            )}
-                                            {currentUserOwesThem > 0 && theyOweCurrentUser > 0 && ' · '}
-                                            {theyOweCurrentUser > 0 && (
-                                                <span className="text-emerald-500">They owe you ₹{theyOweCurrentUser.toFixed(2)}</span>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="flex items-center gap-4">
-                                    <div className="text-right">
-                                        {net > 0 ? (
-                                            <span className="text-green-600 font-bold block">Owed ₹{net.toFixed(2)}</span>
-                                        ) : net < 0 ? (
-                                            <span className="text-red-600 font-bold block">Owes ₹{Math.abs(net).toFixed(2)}</span>
-                                        ) : (
-                                            <span className="text-gray-500 font-bold block">Settled Up</span>
-                                        )}
+                            <div className="space-y-8">
+                                {nothingForYou && (
+                                    <div className="rounded-2xl bg-emerald-50 border border-emerald-100 px-5 py-6 text-center">
+                                        <p className="text-emerald-800 font-semibold">Everyone is settled up</p>
+                                        <p className="text-sm text-emerald-700/90 mt-1">
+                                            No open debts between members in this group.
+                                        </p>
                                     </div>
-                                    {!isCurrentUser && currentUserOwesThem > 0 && (
-                                        <button 
-                                            onClick={() => handleSettle(b.user_id, currentUserOwesThem)} 
-                                            className="btn btn-primary text-xs py-1 px-3"
-                                        >
-                                            Settle ₹{currentUserOwesThem.toFixed(2)}
-                                        </button>
-                                    )}
-                                </div>
+                                )}
+
+                                {iOwe.length > 0 && (
+                                    <div>
+                                        <p className="text-[0.65rem] font-bold uppercase tracking-widest text-gray-400 mb-3">
+                                            You pay
+                                        </p>
+                                        <ul className="space-y-3">
+                                            {iOwe.map((b) => {
+                                                const owed = parseFloat(b.current_user_owes_them) || 0;
+                                                return (
+                                                    <li
+                                                        key={b.user_id}
+                                                        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border border-gray-100 bg-white px-4 py-4 shadow-sm"
+                                                    >
+                                                        <div className="flex items-start gap-3">
+                                                            <div className="mt-0.5 rounded-full bg-red-50 p-2 text-red-600">
+                                                                <ArrowRightCircle className="w-4 h-4" />
+                                                            </div>
+                                                            <div>
+                                                                <p className="font-semibold text-gray-900">{b.name}</p>
+                                                                <p className="text-sm text-gray-600 mt-0.5">
+                                                                    You owe{' '}
+                                                                    <span className="font-bold text-red-600 tabular-nums">
+                                                                        ₹{owed.toFixed(2)}
+                                                                    </span>
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleSettle(b.user_id, owed)}
+                                                            className="btn btn-primary text-sm shrink-0 py-2 px-5 rounded-xl"
+                                                        >
+                                                            Settle ₹{owed.toFixed(2)}
+                                                        </button>
+                                                    </li>
+                                                );
+                                            })}
+                                        </ul>
+                                    </div>
+                                )}
+
+                                {oweMe.length > 0 && (
+                                    <div>
+                                        <p className="text-[0.65rem] font-bold uppercase tracking-widest text-gray-400 mb-3">
+                                            You&apos;re owed
+                                        </p>
+                                        <ul className="space-y-2">
+                                            {oweMe.map((b) => {
+                                                const amt = parseFloat(b.they_owe_current_user) || 0;
+                                                return (
+                                                    <li
+                                                        key={b.user_id}
+                                                        className="flex justify-between items-center rounded-xl bg-gray-50 px-4 py-3 text-sm"
+                                                    >
+                                                        <span className="font-medium text-gray-900">{b.name}</span>
+                                                        <span className="font-bold text-emerald-700 tabular-nums">
+                                                            ₹{amt.toFixed(2)}
+                                                        </span>
+                                                    </li>
+                                                );
+                                            })}
+                                        </ul>
+                                        <p className="text-xs text-gray-400 mt-2">
+                                            They can settle with you from their account using Payments.
+                                        </p>
+                                    </div>
+                                )}
+
+                                <details className="rounded-xl border border-gray-100 bg-gray-50/80 px-4 py-3">
+                                    <summary className="cursor-pointer text-sm font-medium text-gray-700">
+                                        Full member snapshot
+                                    </summary>
+                                    <div className="mt-4 space-y-2 border-t border-gray-100 pt-4">
+                                        {balances.map((b) => {
+                                            const net = parseFloat(b.net) || 0;
+                                            const isSelf = b.user_id === user?.user_id;
+                                            return (
+                                                <div
+                                                    key={b.user_id}
+                                                    className="flex justify-between items-center text-sm py-1.5 border-b border-gray-100 last:border-0"
+                                                >
+                                                    <span className="text-gray-700">
+                                                        {b.name}
+                                                        {isSelf && (
+                                                            <span className="text-indigo-500 ml-1">(you)</span>
+                                                        )}
+                                                    </span>
+                                                    <span
+                                                        className={`font-semibold tabular-nums ${
+                                                            net > 0.005
+                                                                ? 'text-emerald-600'
+                                                                : net < -0.005
+                                                                  ? 'text-red-600'
+                                                                  : 'text-gray-400'
+                                                        }`}
+                                                    >
+                                                        {Math.abs(net) < 0.005
+                                                            ? 'Even'
+                                                            : net > 0
+                                                              ? `+₹${net.toFixed(2)}`
+                                                              : `−₹${Math.abs(net).toFixed(2)}`}
+                                                    </span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                        <p className="text-[0.65rem] text-gray-400 mt-3 leading-relaxed">
+                                            Snapshot net is for this group only (positive ≈ more owed to you than you
+                                            owe).
+                                        </p>
+                                </details>
                             </div>
                         );
-                    })}
-                </div>
+                    })()
+                )}
             </div>
         </div>
     );

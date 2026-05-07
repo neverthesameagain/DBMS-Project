@@ -4,7 +4,7 @@
 -- read another user's group expenses or payments. The Flask request
 -- hook sets these values once per authenticated request:
 --   SET app.user_id = '<user_id>';
---   SET app.role = 'USER' or 'ADMIN';
+--   SET app.role = 'USER' | 'ADMIN' | 'BANKER';
 --
 -- Missing session variables must never crash a SELECT. Policies use
 -- current_setting(..., true) and NULLIF casts so anonymous/misconfigured
@@ -158,4 +158,8 @@ FOR INSERT
 WITH CHECK (
     app_is_admin()
     OR from_user_id = app_user_id()
+    OR (
+        app_is_banker()
+        AND payment_type IN ('BANKER_ADD', 'BANKER_REMOVE', 'BANKER_TRANSFER')
+    )
 );

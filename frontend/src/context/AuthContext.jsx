@@ -33,24 +33,24 @@ export const AuthProvider = ({ children }) => {
         const res = await api.post('/api/auth/login', { email, password });
         const { access_token, user: userData } = res.data;
         localStorage.setItem('splitzy_token', access_token);
-        
-        if (userData) {
-            localStorage.setItem('splitzy_user', JSON.stringify(userData));
-            setUser(userData);
+
+        let resolved = userData || null;
+        if (resolved) {
+            localStorage.setItem('splitzy_user', JSON.stringify(resolved));
+            setUser(resolved);
         } else {
-            // Fallback: if the login response doesn't include user data,
-            // fetch the profile to get the complete user object
             localStorage.removeItem('splitzy_user');
             try {
                 const profileRes = await api.get('/api/auth/profile');
-                localStorage.setItem('splitzy_user', JSON.stringify(profileRes.data));
-                setUser(profileRes.data);
+                resolved = profileRes.data;
+                localStorage.setItem('splitzy_user', JSON.stringify(resolved));
+                setUser(resolved);
             } catch {
-                // If profile fetch fails, still set a minimal user from the token
-                setUser({ email });
+                resolved = { email };
+                setUser(resolved);
             }
         }
-        return true;
+        return resolved;
     };
 
     const logout = useCallback(async () => {

@@ -3,6 +3,14 @@
 -- PostgreSQL  |  Deploy on: Render / Supabase / Neon
 -- Aligned with project specification
 -- =============================================================
+--
+-- Expected NOTICE-level messages on full rebuild (all harmless):
+--   • "trigger … does not exist, skipping" — DROP TRIGGER IF EXISTS runs before the
+--     first CREATE TRIGGER on freshly recreated tables.
+--   • "Drop cascades to view user_transaction_ledger" — DROP TABLE … CASCADE removes
+--     dependent views; they are recreated later in this file (and views.sql).
+--
+SET client_min_messages TO WARNING;
 
 -- Drop tables in reverse dependency order (safe re-run)
 DROP TABLE IF EXISTS future_expense        CASCADE;
@@ -31,7 +39,7 @@ CREATE TABLE users (
     opening_balance  NUMERIC(12, 2) DEFAULT 0.00,
     current_balance  NUMERIC(12, 2) DEFAULT 0.00,
     role             VARCHAR(10)    NOT NULL DEFAULT 'USER'
-                         CHECK (role IN ('USER', 'ADMIN')),
+                         CHECK (role IN ('USER', 'ADMIN', 'BANKER')),
     is_active        BOOLEAN        NOT NULL DEFAULT TRUE,
     created_at       TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -111,7 +119,7 @@ CREATE TABLE transactions (
 -- =============================================================
 -- 8. PAYMENT
 --    Records any transfer of money between two users.
---    payment_type: PERSONAL (one-to-one) | GROUP (settles a group expense)
+--    payment_type: PERSONAL | GROUP | BANKER_ADD | BANKER_REMOVE | BANKER_TRANSFER
 --    status      : PENDING → COMPLETED | FAILED
 -- =============================================================
 CREATE TABLE payment (
@@ -122,7 +130,7 @@ CREATE TABLE payment (
     amount         NUMERIC(12, 2) NOT NULL CHECK (amount > 0),
     upi_ref        VARCHAR(100),
     payment_type   VARCHAR(20)    NOT NULL DEFAULT 'PERSONAL'
-                       CHECK (payment_type IN ('PERSONAL', 'GROUP')),
+                       CHECK (payment_type IN ('PERSONAL', 'GROUP', 'BANKER_ADD', 'BANKER_REMOVE', 'BANKER_TRANSFER')),
     status         VARCHAR(20)    NOT NULL DEFAULT 'COMPLETED'
                        CHECK (status IN ('PENDING', 'COMPLETED', 'FAILED')),
     note           VARCHAR(200),
@@ -189,7 +197,23 @@ CREATE INDEX idx_payment_txn          ON payment USING HASH(transaction_id);
 CREATE OR REPLACE FUNCTION set_initial_balance()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW.current_balance := NEW.opening_balance;
+    IF NEW.role IN ('ADMIN', 'BANKER') THEN
+        NEW.opening_balance := 0;
+        NEW.current_balance := 0;
+    ELSE
+        NEW.current_balance := NEW.opening_balance;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION enforce_staff_no_wallet_balance()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.role IN ('ADMIN', 'BANKER') THEN
+        NEW.opening_balance := 0;
+        NEW.current_balance := 0;
+    END IF;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -199,6 +223,12 @@ CREATE TRIGGER trg_set_initial_balance
     BEFORE INSERT ON users
     FOR EACH ROW
     EXECUTE FUNCTION set_initial_balance();
+
+DROP TRIGGER IF EXISTS trg_staff_no_wallet_balance ON users;
+CREATE TRIGGER trg_staff_no_wallet_balance
+    BEFORE UPDATE ON users
+    FOR EACH ROW
+    EXECUTE FUNCTION enforce_staff_no_wallet_balance();
 
 
 -- =============================================================
@@ -399,13 +429,27 @@ BEGIN
     -- Balances are derived from completed payment inserts inside the DB.
     -- Python must not mutate current_balance directly.
     IF NEW.status = 'COMPLETED' THEN
-        UPDATE users
-        SET current_balance = current_balance - NEW.amount
-        WHERE user_id = NEW.from_user_id;
+        IF NEW.payment_type = 'BANKER_ADD' THEN
+            UPDATE users
+            SET current_balance = current_balance + NEW.amount
+            WHERE user_id = NEW.to_user_id
+              AND role = 'USER';
+        ELSIF NEW.payment_type = 'BANKER_REMOVE' THEN
+            UPDATE users
+            SET current_balance = current_balance - NEW.amount
+            WHERE user_id = NEW.from_user_id
+              AND role = 'USER';
+        ELSE
+            UPDATE users
+            SET current_balance = current_balance - NEW.amount
+            WHERE user_id = NEW.from_user_id
+              AND role = 'USER';
 
-        UPDATE users
-        SET current_balance = current_balance + NEW.amount
-        WHERE user_id = NEW.to_user_id;
+            UPDATE users
+            SET current_balance = current_balance + NEW.amount
+            WHERE user_id = NEW.to_user_id
+              AND role = 'USER';
+        END IF;
     END IF;
 
     RETURN NEW;
@@ -421,10 +465,13 @@ CREATE OR REPLACE FUNCTION update_budget_after_payment()
 RETURNS TRIGGER AS $$
 BEGIN
     IF NEW.status = 'COMPLETED' AND NEW.category_id IS NOT NULL THEN
-        UPDATE personal_expense_split
+        UPDATE personal_expense_split pes
         SET amount_spent = amount_spent + NEW.amount
-        WHERE user_id = NEW.from_user_id
-          AND category_id = NEW.category_id;
+        FROM users u
+        WHERE pes.user_id = NEW.from_user_id
+          AND pes.category_id = NEW.category_id
+          AND u.user_id = pes.user_id
+          AND u.role = 'USER';
     END IF;
 
     RETURN NEW;
@@ -528,3 +575,5 @@ FROM group_members gm
 JOIN users u ON u.user_id = gm.user_id
 LEFT JOIN expense_split_group esg ON esg.group_id = gm.group_id AND (esg.paid_by = u.user_id OR esg.paid_for = u.user_id)
 GROUP BY gm.group_id, u.user_id, u.first_name, u.last_name;
+
+RESET client_min_messages;

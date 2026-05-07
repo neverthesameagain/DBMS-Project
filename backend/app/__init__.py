@@ -93,14 +93,19 @@ def create_app():
         db.session.execute(text("SELECT set_config('app.user_id', :uid, false)"), {"uid": str(user_id)})
         db.session.execute(text("SELECT set_config('app.role', :role, false)"), {"role": role})
 
-    @app.teardown_request
-    def clear_database_session_context(_exception=None):
-        if request.method == 'OPTIONS':
-            return
-
-        if db.session.is_active:
-            db.session.execute(text("SELECT set_config('app.user_id', '', false)"))
-            db.session.execute(text("SELECT set_config('app.role', '', false)"))
+    @app.teardown_appcontext
+    def clear_database_session_context(exc=None):
+        """Reset GUCs and drop scoped session; rollback avoids aborted-txn teardown cascades."""
+        sess = db.session
+        try:
+            if sess.is_active:
+                try:
+                    sess.execute(text("SELECT set_config('app.user_id', '', false)"))
+                    sess.execute(text("SELECT set_config('app.role', '', false)"))
+                except Exception:
+                    sess.rollback()
+        finally:
+            sess.remove()
 
     # ===================================================================
     # HEALTH ENDPOINT (for Render/Kubernetes health checks)

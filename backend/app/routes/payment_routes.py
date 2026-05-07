@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from app.models import Payment, User, Category, Transaction
+from app.models import Category, ExpenseSplitGroup, Payment, Transaction, UpiId, User
 from app.extensions import db
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
@@ -41,7 +41,6 @@ def send_payment():
     # Round to 2 decimal places to prevent floating-point issues
     amount = round(amount, 2)
 
-    from app.models import UpiId
     recipient_type = data.get('recipient_type', 'email')
     recipient_identifier = data.get('recipient_identifier', '').strip()
 
@@ -61,6 +60,14 @@ def send_payment():
     if not to_user:
         return jsonify({"error": "Recipient not found"}), 404
 
+    sender = User.query.get(current_user_id)
+    if not sender:
+        return jsonify({"error": "Sender not found"}), 404
+    if sender.role != 'USER':
+        return jsonify({"error": "Wallet payments are only available for standard user accounts."}), 403
+    if to_user.role != 'USER':
+        return jsonify({"error": "Recipient must be a standard user account."}), 400
+
     if to_user.user_id == current_user_id:
         return jsonify({"error": "Cannot pay yourself"}), 400
 
@@ -77,6 +84,32 @@ def send_payment():
 
     if payment_type == 'GROUP' and not group_id:
         return jsonify({"error": "Group ID is required for group payments"}), 400
+
+    debts_for_settlement = []
+    if payment_type == 'GROUP' and group_id:
+        try:
+            gid = int(group_id)
+        except (TypeError, ValueError):
+            return jsonify({"error": "Invalid group ID"}), 400
+        debts_for_settlement = (
+            ExpenseSplitGroup.query.filter_by(
+                group_id=gid,
+                paid_for=current_user_id,
+                paid_by=to_user.user_id,
+                is_settled=False,
+            )
+            .order_by(ExpenseSplitGroup.created_at.asc())
+            .all()
+        )
+        total_owed = round(sum(float(d.amount or 0) for d in debts_for_settlement), 2)
+        if debts_for_settlement and amount + 1e-9 < total_owed:
+            return jsonify({
+                "error": (
+                    f"Outstanding debt to this person in this group is ₹{total_owed:.2f}. "
+                    f"Pay at least that amount to settle every linked split (you entered ₹{amount:.2f})."
+                ),
+                "required_amount": total_owed,
+            }), 400
 
     try:
         # Create a Transaction record first (required FK for Payment)
@@ -105,20 +138,12 @@ def send_payment():
         # Update the transaction reference to point to the payment
         txn.reference_id = payment.payment_id
 
-        # If tagged to a group, settle outstanding debts between sender and receiver in that group
         settled_count = 0
-        if payment_type == 'GROUP' and group_id:
-            from app.models import ExpenseSplitGroup
-            debts = ExpenseSplitGroup.query.filter_by(
-                group_id=group_id,
-                paid_for=current_user_id,
-                paid_by=to_user.user_id,
-                is_settled=False
-            ).all()
-            for d in debts:
+        if debts_for_settlement:
+            for d in debts_for_settlement:
                 d.is_settled = True
                 d.payment_id = payment.payment_id
-                settled_count += 1
+            settled_count = len(debts_for_settlement)
 
         db.session.commit()
         db.session.refresh(payment)
