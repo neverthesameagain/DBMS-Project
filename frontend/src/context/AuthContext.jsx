@@ -33,8 +33,23 @@ export const AuthProvider = ({ children }) => {
         const res = await api.post('/api/auth/login', { email, password });
         const { access_token, user: userData } = res.data;
         localStorage.setItem('splitzy_token', access_token);
-        localStorage.setItem('splitzy_user', JSON.stringify(userData));
-        setUser(userData);
+        
+        if (userData) {
+            localStorage.setItem('splitzy_user', JSON.stringify(userData));
+            setUser(userData);
+        } else {
+            // Fallback: if the login response doesn't include user data,
+            // fetch the profile to get the complete user object
+            localStorage.removeItem('splitzy_user');
+            try {
+                const profileRes = await api.get('/api/auth/profile');
+                localStorage.setItem('splitzy_user', JSON.stringify(profileRes.data));
+                setUser(profileRes.data);
+            } catch {
+                // If profile fetch fails, still set a minimal user from the token
+                setUser({ email });
+            }
+        }
         return true;
     };
 
@@ -58,4 +73,5 @@ export const AuthProvider = ({ children }) => {
     );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => useContext(AuthContext);

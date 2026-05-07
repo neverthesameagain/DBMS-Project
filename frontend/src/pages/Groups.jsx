@@ -47,17 +47,34 @@ const Groups = () => {
 
     return (
         <div className="max-w-4xl mx-auto space-y-6">
-            <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-bold text-gray-900">Your Groups</h2>
+            <header className="flex justify-between items-center bg-white p-6 rounded-lg shadow-sm">
+                <div>
+                    <h2 className="text-2xl font-bold text-gray-900">Your Groups</h2>
+                </div>
                 <button onClick={() => setShowCreate(!showCreate)} className="btn btn-primary flex items-center gap-2">
                     <Plus className="w-4 h-4" />
                     Create Group
                 </button>
-            </div>
+            </header>
+
+            {/* Master Net Balance Across all Groups */}
+            {!loading && groups.length > 0 && (
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col md:flex-row justify-between items-center gap-4">
+                    <div>
+                        <p className="text-[0.65rem] font-bold text-gray-400 uppercase tracking-widest mb-1">Global Debt Tally</p>
+                        {(() => {
+                            const total = groups.reduce((acc, g) => acc + (parseFloat(g.net_balance) || 0), 0);
+                            if (total > 0) return <h3 className="text-3xl font-light text-emerald-600 flex items-baseline gap-1"><span className="text-lg text-emerald-400 font-medium">₹</span>{total.toFixed(2)}</h3>;
+                            if (total < 0) return <h3 className="text-3xl font-light text-red-600 flex items-baseline gap-1"><span className="text-lg text-red-400 font-medium">₹</span>{Math.abs(total).toFixed(2)}</h3>;
+                            return <h3 className="text-3xl font-light text-gray-800 flex items-baseline gap-1">Settled Up</h3>;
+                        })()}
+                    </div>
+                </div>
+            )}
 
             {showCreate && (
-                <div className="card animate-in fade-in slide-in-from-top-4">
-                    <form onSubmit={handleCreateGroup} className="flex gap-3">
+                <div className="card">
+                    <form onSubmit={handleCreateGroup} className="flex gap-4">
                         <input
                             type="text"
                             placeholder="Group Name (e.g. Goa Trip)"
@@ -66,7 +83,7 @@ const Groups = () => {
                             onChange={(e) => setNewGroupName(e.target.value)}
                         />
                         <button type="submit" className="btn btn-primary" disabled={creating}>
-                            {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Create'}
+                            {creating ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Create'}
                         </button>
                     </form>
                 </div>
@@ -74,10 +91,10 @@ const Groups = () => {
 
             <div className="grid gap-4">
                 {groups.map(group => (
-                    <Link to={`/groups/${group.group_id}`} key={group.group_id} className="card hover:shadow-md transition-shadow flex justify-between items-center group">
+                    <Link to={`/groups/${group.group_id}`} key={group.group_id} className="card hover:border-blue-500 flex justify-between items-center group transition-colors border-2 border-transparent">
                         <div className="flex items-center gap-4">
-                            <div className="p-3 bg-indigo-50 rounded-full group-hover:bg-indigo-100 transition-colors">
-                                <Users className="w-6 h-6 text-indigo-600" />
+                            <div className="p-3 bg-blue-50 rounded-lg text-blue-600">
+                                <Users className="w-6 h-6" />
                             </div>
                             <div>
                                 <h3 className="font-bold text-gray-900">{group.group_name}</h3>
@@ -86,11 +103,29 @@ const Groups = () => {
                                 </p>
                             </div>
                         </div>
-                        <div className="flex items-center gap-3">
-                            <span className="px-3 py-1 text-xs font-medium bg-gray-100 text-gray-600 rounded-full">
+                        <div className="flex items-center gap-4">
+                            <div className="text-right mr-4 hidden md:block">
+                                {(() => {
+                                    const netBal = parseFloat(group.net_balance) || 0;
+                                    if (!netBal) return <p className="text-sm font-medium text-gray-500">Settled Up</p>;
+                                    if (netBal > 0) return (
+                                        <>
+                                            <p className="text-xs text-gray-400 font-medium">You get back</p>
+                                            <p className="text-sm font-bold text-emerald-600">₹{netBal.toFixed(2)}</p>
+                                        </>
+                                    );
+                                    if (netBal < 0) return (
+                                        <>
+                                            <p className="text-xs text-gray-400 font-medium">You owe</p>
+                                            <p className="text-sm font-bold text-red-600">₹{Math.abs(netBal).toFixed(2)}</p>
+                                        </>
+                                    );
+                                })()}
+                            </div>
+                            <span className="px-3 py-1 text-xs font-semibold uppercase bg-gray-100 text-gray-600 rounded">
                                 {group.role}
                             </span>
-                            <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-indigo-500" />
+                            <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-blue-500" />
                         </div>
                     </Link>
                 ))}

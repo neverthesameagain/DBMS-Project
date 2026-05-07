@@ -22,10 +22,10 @@ const Login = () => {
         setLoading(true);
         setError('');
 
-        const success = await login(email, password);
-        if (success) {
+        try {
+            await login(email, password);
             navigate('/');
-        } else {
+        } catch {
             setError('Invalid email or password');
             setLoading(false);
         }
