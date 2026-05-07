@@ -49,14 +49,15 @@ class User(db.Model):
     future_expenses   = db.relationship('FutureExpense',      backref='user', lazy=True, cascade='all, delete-orphan')
 
     def to_dict(self):
+        staff = self.role in ('ADMIN', 'BANKER')
         return {
             'user_id':         self.user_id,
             'first_name':      self.first_name,
             'last_name':       self.last_name,
             'email':           self.email,
             'phone_number':    self.phone_number,
-            'opening_balance': float(self.opening_balance or 0),
-            'current_balance': float(self.current_balance or 0),
+            'opening_balance': 0.0 if staff else float(self.opening_balance or 0),
+            'current_balance': 0.0 if staff else float(self.current_balance or 0),
             'role':            self.role,
             'is_active':       self.is_active,
         }

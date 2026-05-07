@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Loader2, RotateCcw, Shield, Trash2, Users } from 'lucide-react';
+import { Loader2, RotateCcw, Trash2, Users } from 'lucide-react';
 import api from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 
@@ -99,19 +99,33 @@ const AdminUsers = () => {
                                     <td className="px-6 py-4 text-gray-600">{item.email}</td>
                                     <td className="px-6 py-4 text-gray-600">{item.phone_number}</td>
                                     <td className="px-6 py-4">
-                                        <span className="px-2 py-1 rounded-full bg-gray-100 text-xs font-bold text-gray-700">{item.role}</span>
-                                        {!item.is_active && <span className="ml-2 px-2 py-1 rounded-full bg-red-50 text-xs font-bold text-red-700">INACTIVE</span>}
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <select
+                                                className="text-xs font-bold border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-800 focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-40 disabled:cursor-not-allowed"
+                                                value={item.role}
+                                                disabled={item.user_id === user?.user_id}
+                                                title={
+                                                    item.user_id === user?.user_id
+                                                        ? 'Cannot change your own role here'
+                                                        : 'USER · BANKER · ADMIN'
+                                                }
+                                                onChange={(e) =>
+                                                    handleUserPatch(item, { role: e.target.value })
+                                                }
+                                            >
+                                                <option value="USER">USER</option>
+                                                <option value="BANKER">BANKER</option>
+                                                <option value="ADMIN">ADMIN</option>
+                                            </select>
+                                            {!item.is_active && (
+                                                <span className="px-2 py-1 rounded-full bg-red-50 text-xs font-bold text-red-700">
+                                                    INACTIVE
+                                                </span>
+                                            )}
+                                        </div>
                                     </td>
                                     <td className="px-6 py-4 text-right font-medium">₹{item.current_balance}</td>
                                     <td className="px-6 py-4 text-right">
-                                        <button
-                                            onClick={() => handleUserPatch(item, { role: item.role === 'ADMIN' ? 'USER' : 'ADMIN' })}
-                                            disabled={item.user_id === user?.user_id || !item.is_active}
-                                            className="inline-flex p-2 text-blue-600 hover:bg-blue-50 rounded disabled:opacity-40 disabled:cursor-not-allowed mr-1"
-                                            title="Toggle admin role"
-                                        >
-                                            <Shield className="w-4 h-4" />
-                                        </button>
                                         {!item.is_active && (
                                             <button
                                                 onClick={() => handleUserPatch(item, { is_active: true })}

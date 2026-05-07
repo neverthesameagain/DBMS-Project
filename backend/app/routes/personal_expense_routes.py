@@ -1,15 +1,28 @@
 from flask import Blueprint, request, jsonify
 from app.extensions import db
-from app.models import PersonalExpenseSplit, Category, User
+from app.models import PersonalExpenseSplit, User
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime
 
 budget_bp = Blueprint('budgets', __name__)
 
+
+def _budget_wallet_guard(user_id):
+    user = User.query.get(user_id)
+    if not user or not user.is_active:
+        return jsonify({'error': 'User not found'}), 404
+    if user.role != 'USER':
+        return jsonify({'error': 'Personal budgets apply only to standard user accounts.'}), 403
+    return None
+
+
 @budget_bp.route('', methods=['GET'])
 @jwt_required()
 def get_budgets():
     user_id = int(get_jwt_identity())
+    err = _budget_wallet_guard(user_id)
+    if err:
+        return err
     budgets = PersonalExpenseSplit.query.filter_by(user_id=user_id).all()
     return jsonify([b.to_dict() for b in budgets]), 200
 
@@ -17,6 +30,9 @@ def get_budgets():
 @jwt_required()
 def add_budget():
     user_id = int(get_jwt_identity())
+    err = _budget_wallet_guard(user_id)
+    if err:
+        return err
     data = request.get_json()
     
     category_id = data.get('category_id')
@@ -58,6 +74,9 @@ def add_budget():
 @jwt_required()
 def update_budget(category_id):
     user_id = int(get_jwt_identity())
+    err = _budget_wallet_guard(user_id)
+    if err:
+        return err
     budget = PersonalExpenseSplit.query.filter_by(user_id=user_id, category_id=category_id).first()
     
     if not budget:
@@ -90,6 +109,9 @@ def update_budget(category_id):
 @jwt_required()
 def delete_budget(category_id):
     user_id = int(get_jwt_identity())
+    err = _budget_wallet_guard(user_id)
+    if err:
+        return err
     budget = PersonalExpenseSplit.query.filter_by(user_id=user_id, category_id=category_id).first()
     
     if not budget:

@@ -259,6 +259,29 @@ const Payments = () => {
                 </div>
             </div>
 
+            {searchParams.get('groupId') &&
+                searchParams.get('settleUserId') &&
+                paymentType === 'GROUP' &&
+                selectedGroupId && (
+                    <div className="rounded-2xl border border-indigo-100 bg-indigo-50/90 px-5 py-4 text-sm text-indigo-900">
+                        <p className="font-semibold">Group settlement</p>
+                        <p className="mt-1 text-indigo-800/90">
+                            {groups.find((g) => String(g.group_id) === String(selectedGroupId))?.group_name ? (
+                                <>
+                                    Paying in{' '}
+                                    <span className="font-medium">
+                                        {groups.find((g) => String(g.group_id) === String(selectedGroupId))
+                                            ?.group_name}
+                                    </span>
+                                    . Amount and recipient are prefilled from &quot;Settle&quot; — confirm below.
+                                </>
+                            ) : (
+                                <>Prefilled from group settle-up — choose group above if missing.</>
+                            )}
+                        </p>
+                    </div>
+                )}
+
             <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden mb-8">
                 <form onSubmit={handlePayment} className="p-8">
                     

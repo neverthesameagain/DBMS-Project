@@ -13,7 +13,9 @@ const Login = () => {
 
     useEffect(() => {
         if (user) {
-            navigate('/');
+            if (user.role === 'ADMIN') navigate('/admin');
+            else if (user.role === 'BANKER') navigate('/banker');
+            else navigate('/');
         }
     }, [user, navigate]);
 
@@ -23,10 +25,14 @@ const Login = () => {
         setError('');
 
         try {
-            await login(email, password);
-            navigate('/');
+            const loggedIn = await login(email, password);
+            const role = loggedIn?.role;
+            if (role === 'ADMIN') navigate('/admin');
+            else if (role === 'BANKER') navigate('/banker');
+            else navigate('/');
         } catch {
             setError('Invalid email or password');
+        } finally {
             setLoading(false);
         }
     };
