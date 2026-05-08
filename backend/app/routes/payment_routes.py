@@ -71,21 +71,25 @@ def send_payment():
     if to_user.user_id == current_user_id:
         return jsonify({"error": "Cannot pay yourself"}), 400
 
-    # Resolve category (optional)
-    category_id = None
-    if data.get('category'):
-        cat = Category.query.filter_by(category_name=data['category']).first()
-        category_id = cat.category_id if cat else None
+    category_name = (data.get('category') or '').strip() or 'General'
+    cat = Category.query.filter_by(category_name=category_name).first()
+    category_id = cat.category_id if cat else None
 
     payment_type = data.get('payment_type', 'PERSONAL')
     group_id = data.get('group_id')
+    skip_split_settlement = bool(data.get('skip_split_settlement'))
+
     if payment_type not in {'PERSONAL', 'GROUP'}:
         return jsonify({"error": "Invalid payment type"}), 400
 
+    # GROUP ties this transfer to unsettled splits in that one group (explicit settle-up flow).
     if payment_type == 'GROUP' and not group_id:
-        return jsonify({"error": "Group ID is required for group payments"}), 400
+        return jsonify({"error": "Group ID is required for group settlement payments"}), 400
 
     debts_for_settlement = []
+    # PERSONAL: if you still owe this recipient anywhere and pay >= that total, close those splits.
+    still_owe_peer_total = None
+
     if payment_type == 'GROUP' and group_id:
         try:
             gid = int(group_id)
@@ -110,6 +114,25 @@ def send_payment():
                 ),
                 "required_amount": total_owed,
             }), 400
+
+    elif payment_type == 'PERSONAL' and not skip_split_settlement:
+        cand = (
+            ExpenseSplitGroup.query.filter_by(
+                paid_for=current_user_id,
+                paid_by=to_user.user_id,
+                is_settled=False,
+            )
+            .order_by(ExpenseSplitGroup.created_at.asc())
+            .all()
+        )
+        if cand:
+            still_owe_peer_total = round(sum(float(d.amount or 0) for d in cand), 2)
+            if amount + 1e-9 >= still_owe_peer_total:
+                debts_for_settlement = cand
+
+    # Do not attribute settlement transfers to spending budgets.
+    if debts_for_settlement:
+        category_id = None
 
     try:
         # Create a Transaction record first (required FK for Payment)
@@ -151,6 +174,13 @@ def send_payment():
         d = payment.to_dict()
         d['direction'] = 'sent'
         d['settled_count'] = settled_count
+        if (
+            payment_type == 'PERSONAL'
+            and still_owe_peer_total is not None
+            and settled_count == 0
+            and still_owe_peer_total > 0
+        ):
+            d['still_owe_this_recipient'] = still_owe_peer_total
         return jsonify(d), 201
 
     except Exception as exc:

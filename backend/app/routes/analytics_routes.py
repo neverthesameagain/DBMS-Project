@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify
 from app.models import ExpenseSplitGroup, GroupMember, Category, Payment
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from app.constants import PEER_PAYMENT_TYPES
 
 analytics_bp = Blueprint('analytics', __name__)
 
@@ -47,12 +48,16 @@ def get_analytics():
     sent_payments = Payment.query.filter_by(
         from_user_id=current_user_id, status='COMPLETED'
     ).all()
-    total_sent = sum(float(p.amount or 0) for p in sent_payments)
+    total_sent = sum(
+        float(p.amount or 0) for p in sent_payments if p.payment_type in PEER_PAYMENT_TYPES
+    )
 
     received_payments = Payment.query.filter_by(
         to_user_id=current_user_id, status='COMPLETED'
     ).all()
-    total_received = sum(float(p.amount or 0) for p in received_payments)
+    total_received = sum(
+        float(p.amount or 0) for p in received_payments if p.payment_type in PEER_PAYMENT_TYPES
+    )
 
     return jsonify({
         'category_breakdown': [

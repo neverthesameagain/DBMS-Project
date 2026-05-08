@@ -3,6 +3,16 @@ import api from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { Loader2 } from 'lucide-react';
 
+function ledgerEntryLabel(tx) {
+    if (tx.entry_type !== 'PAYMENT') return tx.entry_type;
+    const ps = tx.payment_subtype;
+    if (ps === 'BANKER_ADD') return 'Wallet load';
+    if (ps === 'BANKER_REMOVE') return 'Wallet unload';
+    if (ps === 'GROUP') return 'Settlement';
+    if (ps === 'BANKER_TRANSFER') return 'Assisted transfer';
+    return 'Payment';
+}
+
 const Ledger = () => {
     const { user } = useAuth();
     const [ledger, setLedger] = useState([]);
@@ -51,20 +61,29 @@ const Ledger = () => {
                             {ledger.length === 0 && (
                                 <tr><td colSpan={7} className="text-center py-12 text-gray-500 italic">No transactions found.</td></tr>
                             )}
-                            {ledger.map((tx, i) => (
-                                <tr key={i} className="hover:bg-gray-50 transition-colors">
+                            {ledger.map((tx) => (
+                                <tr
+                                    key={`${tx.transaction_id ?? 'na'}-${tx.reference_id}-${tx.entry_type}-${tx.created_at}`}
+                                    className="hover:bg-gray-50 transition-colors"
+                                >
                                     <td className="px-6 py-4">
                                         <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
                                             tx.entry_type === 'PAYMENT' ? 'bg-blue-100 text-blue-800' :
                                             tx.entry_type === 'EXPENSE' ? 'bg-orange-100 text-orange-800' :
                                             'bg-purple-100 text-purple-800'
                                         }`}>
-                                            {tx.entry_type}
+                                            {ledgerEntryLabel(tx)}
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 font-bold text-gray-900">₹{(parseFloat(tx.amount) || 0).toFixed(2)}</td>
                                     <td className="px-6 py-4">
-                                        {tx.category_name ? <span className="text-sm font-medium text-gray-600 bg-gray-100 px-2 py-0.5 rounded">{tx.category_name}</span> : <span className="text-gray-400">—</span>}
+                                        {tx.category_name ? (
+                                            <span className="text-sm font-medium text-gray-600 bg-gray-100 px-2 py-0.5 rounded">
+                                                {tx.category_name}
+                                            </span>
+                                        ) : (
+                                            <span className="text-sm text-gray-500">General</span>
+                                        )}
                                     </td>
                                     <td className="px-6 py-4 text-sm text-gray-700">{tx.from_name || <span className="text-gray-400">—</span>}</td>
                                     <td className="px-6 py-4 text-sm text-gray-700">{tx.to_name || <span className="text-gray-400">—</span>}</td>

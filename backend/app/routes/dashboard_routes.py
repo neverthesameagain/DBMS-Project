@@ -3,6 +3,7 @@ from app.models import ExpenseSplitGroup, GroupMember, Payment, User
 from app.extensions import db
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime, timezone
+from app.constants import PEER_PAYMENT_TYPES, WALLET_ADJUSTMENT_TYPES
 
 dashboard_bp = Blueprint('dashboard', __name__)
 
@@ -53,12 +54,17 @@ def get_stats():
     memberships = GroupMember.query.filter_by(user_id=current_user_id).all()
     active_groups_count = len(memberships)
 
-    # Payment specific generic stats — filter to COMPLETED status
+    # Peer-direction totals only (PERSONAL / GROUP / banker-assisted transfers).
+    # Bank cash-in/out (BANKER_ADD / BANKER_REMOVE) moves wallet balance but is not borrow/lend.
     sent_payments = Payment.query.filter_by(from_user_id=current_user_id, status='COMPLETED').all()
-    total_sent = sum(float(p.amount or 0) for p in sent_payments)
+    total_sent = sum(
+        float(p.amount or 0) for p in sent_payments if p.payment_type in PEER_PAYMENT_TYPES
+    )
 
     received_payments = Payment.query.filter_by(to_user_id=current_user_id, status='COMPLETED').all()
-    total_received = sum(float(p.amount or 0) for p in received_payments)
+    total_received = sum(
+        float(p.amount or 0) for p in received_payments if p.payment_type in PEER_PAYMENT_TYPES
+    )
 
     return jsonify({
         'you_owe':          round(you_owe, 2),
@@ -109,13 +115,28 @@ def get_activity():
     ).order_by(Payment.created_at.desc()).limit(10).all()
 
     for p in payments:
+        if p.payment_type in WALLET_ADJUSTMENT_TYPES:
+            inbound = p.to_user_id == current_user_id
+            activity.append({
+                'type': 'WALLET_ADJUSTMENT',
+                'direction': 'in' if inbound else 'out',
+                'from_name': f'{p.sender.first_name} {p.sender.last_name}' if p.sender else 'Unknown',
+                'to_name': f'{p.receiver.first_name} {p.receiver.last_name}' if p.receiver else 'Unknown',
+                'amount': float(p.amount or 0),
+                'description': (p.note or '').strip() or ('Wallet credit (bank)' if inbound else 'Wallet debit (bank)'),
+                'created_at': p.created_at.isoformat() if p.created_at else '',
+            })
+            continue
+
         activity.append({
-            'type':        'PAYMENT',
-            'from_name':   f'{p.sender.first_name} {p.sender.last_name}' if p.sender else 'Unknown',
-            'to_name':     f'{p.receiver.first_name} {p.receiver.last_name}' if p.receiver else 'Unknown',
-            'amount':      float(p.amount or 0),
-            'description': p.note or 'Payment',
-            'created_at':  p.created_at.isoformat() if p.created_at else '',
+            'type': 'PAYMENT',
+            'payment_type': p.payment_type,
+            'direction': 'sent' if p.from_user_id == current_user_id else 'received',
+            'from_name': f'{p.sender.first_name} {p.sender.last_name}' if p.sender else 'Unknown',
+            'to_name': f'{p.receiver.first_name} {p.receiver.last_name}' if p.receiver else 'Unknown',
+            'amount': float(p.amount or 0),
+            'description': p.note or ('Group settlement' if p.payment_type == 'GROUP' else 'Payment'),
+            'created_at': p.created_at.isoformat() if p.created_at else '',
         })
 
     activity.sort(key=lambda x: x['created_at'], reverse=True)

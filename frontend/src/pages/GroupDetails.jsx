@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import api from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -8,7 +8,7 @@ const CATEGORIES = ['General', 'Food', 'Travel', 'Entertainment', 'Shopping', 'U
 
 const GroupDetails = () => {
     const { groupId } = useParams();
-    const { user } = useAuth();
+    const { user, loading: authLoading } = useAuth();
     const [group, setGroup] = useState(null);
     const [members, setMembers] = useState([]);
     const [expenses, setExpenses] = useState([]);
@@ -39,37 +39,53 @@ const GroupDetails = () => {
 
     const isAdmin = members.some(m => m.user_id === user?.user_id && m.role === 'Admin');
 
-    const fetchAll = async () => {
-        try {
-            const [groupRes, membersRes, expensesRes, balancesRes, paymentsRes] = await Promise.all([
-                api.get(`/api/groups/${groupId}`),
-                api.get(`/api/groups/${groupId}/members`),
-                api.get(`/api/groups/${groupId}/expenses`),
-                api.get(`/api/groups/${groupId}/balances`),
-                api.get('/api/payments'),
-            ]);
-            setGroup(groupRes.data);
-            setMembers(membersRes.data);
-            setExpenses(expensesRes.data);
-            setBalances(balancesRes.data);
-            setRecentPayments((paymentsRes.data || []).filter((p) => p.direction === 'sent'));
+    const loadGroupPageData = useCallback(
+        async ({ signal } = {}) => {
+            const reqOpts = signal ? { signal } : {};
+            setLoading(true);
+            setError('');
+            try {
+                const [groupRes, membersRes, expensesRes, balancesRes, paymentsRes] = await Promise.all([
+                    api.get(`/api/groups/${groupId}`, reqOpts),
+                    api.get(`/api/groups/${groupId}/members`, reqOpts),
+                    api.get(`/api/groups/${groupId}/expenses`, reqOpts),
+                    api.get(`/api/groups/${groupId}/balances`, reqOpts),
+                    api.get('/api/payments', reqOpts),
+                ]);
+                if (signal?.aborted) return;
+                setGroup(groupRes.data);
+                setMembers(membersRes.data);
+                setExpenses(expensesRes.data);
+                setBalances(balancesRes.data);
+                setRecentPayments((paymentsRes.data || []).filter((p) => p.direction === 'sent'));
 
-            const initSplits = {};
-            membersRes.data.forEach((m) => {
-                initSplits[m.user_id] = 0;
-            });
-            setSplits(initSplits);
-        } catch {
-            setError('Failed to load group details.');
-        } finally {
-            setLoading(false);
-        }
-    };
+                const initSplits = {};
+                membersRes.data.forEach((m) => {
+                    initSplits[m.user_id] = 0;
+                });
+                setSplits(initSplits);
+            } catch (err) {
+                if (signal?.aborted || err.code === 'ERR_CANCELED') return;
+                const status = err.response?.status;
+                if (status === 401) {
+                    setError('Session expired or not logged in. Please log in again.');
+                } else {
+                    setError('Failed to load group details.');
+                }
+            } finally {
+                if (!signal?.aborted) setLoading(false);
+            }
+        },
+        [groupId]
+    );
 
     useEffect(() => {
-        fetchAll();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [groupId]);
+        if (authLoading || !user?.user_id || !groupId) return;
+
+        const ac = new AbortController();
+        loadGroupPageData({ signal: ac.signal });
+        return () => ac.abort();
+    }, [groupId, user?.user_id, authLoading, loadGroupPageData]);
 
     const handleEqualSplit = () => {
         if (!amount || !members.length) return;
@@ -136,7 +152,7 @@ const GroupDetails = () => {
             setDescription('');
             setSelectedPaymentId('');
             setExpenseFormError('');
-            fetchAll();
+            loadGroupPageData();
         } catch (err) {
             setExpenseFormError(err.response?.data?.error || err.message || 'Failed to save expense');
         } finally {
@@ -148,7 +164,7 @@ const GroupDetails = () => {
         if (!confirm('Delete this entire expense event block?')) return;
         try {
             await Promise.all(exp.splits.map(s => api.delete(`/api/groups/${groupId}/expenses/${s.expense_id}`)));
-            fetchAll();
+            loadGroupPageData();
         } catch (err) {
             alert('Failed to delete: ' + (err.response?.data?.error || err.message));
         }
@@ -163,7 +179,7 @@ const GroupDetails = () => {
     const handleRoleChange = async (userId, newRole) => {
         try {
             await api.put(`/api/groups/${groupId}/members/${userId}`, { role: newRole });
-            fetchAll();
+            loadGroupPageData();
         } catch (err) {
             alert('Failed to change role: ' + (err.response?.data?.error || err.message));
         }
@@ -173,7 +189,7 @@ const GroupDetails = () => {
         if (!confirm('Remove member?')) return;
         try {
             await api.delete(`/api/groups/${groupId}/members/${userId}`);
-            fetchAll();
+            loadGroupPageData();
         } catch (err) {
             alert('Failed to remove: ' + (err.response?.data?.error || err.message));
         }
@@ -185,7 +201,7 @@ const GroupDetails = () => {
         try {
             await api.post(`/api/groups/${groupId}/members`, { email: newMemberEmail, role: newMemberRole });
             setNewMemberEmail('');
-            fetchAll();
+            loadGroupPageData();
         } catch (err) {
             alert('Failed to add member: ' + (err.response?.data?.error || err.message));
         } finally {
@@ -250,11 +266,12 @@ const GroupDetails = () => {
                 </div>
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
                     <div>
-                        <p className="text-[0.65rem] font-bold text-gray-400 uppercase tracking-widest mb-1">Your Share</p>
+                        <p className="text-[0.65rem] font-bold text-gray-400 uppercase tracking-widest mb-1">Your split total</p>
                         <h3 className="text-3xl font-light text-indigo-600 flex items-baseline gap-1">
                             <span className="text-lg text-indigo-400 font-medium">₹</span>
-                            {(parseFloat(balances.find(b => b.user_id === user?.user_id)?.total_paid) || 0).toFixed(2)}
+                            {(parseFloat(balances.find(b => b.user_id === user?.user_id)?.your_share_total) || 0).toFixed(2)}
                         </h3>
+                        <p className="text-[0.65rem] text-gray-400 mt-2 leading-snug">Sum of every expense line assigned to you (includes settled history).</p>
                     </div>
                 </div>
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">

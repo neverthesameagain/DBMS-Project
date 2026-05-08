@@ -1,7 +1,13 @@
 import axios from 'axios';
 
+// Production / preview: set VITE_API_BASE_URL to your API origin.
+// Development: empty baseURL + vite proxy → requests stay same-origin as the dev server.
+const apiBaseURL =
+    import.meta.env.VITE_API_BASE_URL ||
+    (import.meta.env.DEV ? '' : 'http://127.0.0.1:5001');
+
 const api = axios.create({
-    baseURL: import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:5001',
+    baseURL: apiBaseURL,
     headers: {
         'Content-Type': 'application/json',
     },
@@ -16,13 +22,17 @@ api.interceptors.request.use(config => {
     return config;
 });
 
-// On 401, clear stale token so user gets redirected to login
+// On 401 with a Bearer attached, clear stale credentials (expired / revoked JWT).
+// Skip clearing when no Authorization was sent (avoids wiping a valid token uselessly).
 api.interceptors.response.use(
     response => response,
     error => {
         if (error.response?.status === 401) {
-            localStorage.removeItem('splitzy_token');
-            localStorage.removeItem('splitzy_user');
+            const sentAuth = error.config?.headers?.Authorization;
+            if (sentAuth) {
+                localStorage.removeItem('splitzy_token');
+                localStorage.removeItem('splitzy_user');
+            }
         }
         return Promise.reject(error);
     }

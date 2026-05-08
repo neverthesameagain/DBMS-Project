@@ -39,6 +39,13 @@ CREATE TRIGGER trg_expense_transaction
     EXECUTE FUNCTION create_transaction_for_expense();
 
 
+DROP TRIGGER IF EXISTS trg_expense_delete_ledger ON expense_split_group;
+CREATE TRIGGER trg_expense_delete_ledger
+    BEFORE DELETE ON expense_split_group
+    FOR EACH ROW
+    EXECUTE FUNCTION delete_transaction_for_expense();
+
+
 DROP TRIGGER IF EXISTS trg_update_balance_after_payment ON payment;
 CREATE TRIGGER trg_update_balance_after_payment
     AFTER INSERT ON payment

@@ -170,14 +170,34 @@ const Dashboard = () => {
                             activity.map((item, idx) => (
                                 <div key={idx} className="flex justify-between items-center py-2 border-b border-gray-50 last:border-0 group">
                                     <div className="flex items-center gap-3">
-                                        <div className={`p-2 rounded-full ${item.type === 'PAYMENT' ? 'bg-blue-50 text-blue-500' : 'bg-red-50 text-red-500'}`}>
-                                            {item.type === 'PAYMENT' ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownLeft className="w-4 h-4" />}
+                                        <div className={`p-2 rounded-full ${
+                                            item.type === 'WALLET_ADJUSTMENT'
+                                                ? 'bg-slate-100 text-slate-600'
+                                                : item.type === 'PAYMENT'
+                                                    ? (item.direction === 'sent' ? 'bg-red-50 text-red-500' : 'bg-green-50 text-green-500')
+                                                    : 'bg-orange-50 text-orange-600'
+                                        }`}>
+                                            {item.type === 'WALLET_ADJUSTMENT' ? (
+                                                item.direction === 'in' ? <ArrowDownLeft className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />
+                                            ) : item.type === 'PAYMENT' ? (
+                                                item.direction === 'sent' ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownLeft className="w-4 h-4" />
+                                            ) : (
+                                                <ArrowUpRight className="w-4 h-4" />
+                                            )}
                                         </div>
                                         <div>
                                             <p className="font-medium text-gray-900 text-sm group-hover:text-blue-600 transition-colors">
-                                                {item.type === 'PAYMENT'
-                                                    ? <span className="truncate max-w-[150px] inline-block">{item.from_name} paid {item.to_name}</span>
-                                                    : <span className="truncate max-w-[150px] inline-block">{item.from_name} added expense</span>}
+                                                {item.type === 'WALLET_ADJUSTMENT' ? (
+                                                    <span>{item.direction === 'in' ? 'Wallet credit (bank)' : 'Wallet debit (bank)'}</span>
+                                                ) : item.type === 'PAYMENT' ? (
+                                                    <span className="truncate max-w-[180px] inline-block">
+                                                        {item.payment_type === 'GROUP'
+                                                            ? `Group settlement · ${item.from_name} → ${item.to_name}`
+                                                            : `${item.from_name} → ${item.to_name}`}
+                                                    </span>
+                                                ) : (
+                                                    <span className="truncate max-w-[180px] inline-block">{item.from_name} recorded split · {item.to_name}</span>
+                                                )}
                                             </p>
                                             <p className="text-gray-400 text-xs mt-0.5">{item.description}</p>
                                         </div>

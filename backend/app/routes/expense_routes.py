@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from app.models import ExpenseSplitGroup, GroupMember, User, Category
+from app.models import ExpenseSplitGroup, GroupMember, User, Category, Transaction
 from app.extensions import db
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import text
@@ -193,20 +193,30 @@ def get_group_balances(group_id):
 
     rows = ExpenseSplitGroup.query.filter_by(group_id=group_id).all()
 
-    # Pairwise debts: debts[debtor_id][creditor_id] = amount
+    # Pairwise debts: debts[debtor_id][creditor_id] = amount (unsettled only)
     pairwise = {}
 
+    # Sum of every split line attributed to a member as debtor (their share of expenses).
+    share_assigned = {uid: 0.0 for uid in balances}
+
     for r in rows:
-        # Only count amounts paid for OTHER people in total_paid
-        if r.paid_by in balances and r.paid_by != r.paid_for:
-            balances[r.paid_by]['total_paid'] += float(r.amount or 0)
+        amt = float(r.amount or 0)
+        if r.paid_for in share_assigned:
+            share_assigned[r.paid_for] += amt
+
+        # Unsettled amounts you fronted for others (still outstanding until settled).
+        if (
+            r.paid_by in balances
+            and r.paid_by != r.paid_for
+            and not r.is_settled
+        ):
+            balances[r.paid_by]['total_paid'] += amt
+
         if r.paid_for in balances and not r.is_settled:
             if r.paid_by != r.paid_for:
-                amt = float(r.amount or 0)
                 balances[r.paid_for]['still_owes'] += amt
                 balances[r.paid_by]['is_owed'] += amt
 
-                # Track pairwise: r.paid_for owes r.paid_by
                 if r.paid_for not in pairwise:
                     pairwise[r.paid_for] = {}
                 pairwise[r.paid_for][r.paid_by] = round(
@@ -218,6 +228,7 @@ def get_group_balances(group_id):
         b['total_paid'] = round(b['total_paid'], 2)
         b['still_owes'] = round(b['still_owes'], 2)
         b['is_owed'] = round(b['is_owed'], 2)
+        b['your_share_total'] = round(share_assigned.get(uid, 0.0), 2)
         b['net'] = round(b['is_owed'] - b['still_owes'], 2)
 
         # How much the current user owes this member
@@ -237,10 +248,40 @@ def get_group_balances(group_id):
 @expense_bp.route('/groups/<int:group_id>/expenses/<int:expense_id>', methods=['DELETE'])
 @jwt_required()
 def delete_expense(group_id, expense_id):
-    """Splits are ledger-backed; removing rows would orphan transactions rows."""
-    return jsonify({
-        "error": "Expense splits cannot be deleted; each row has a matching ledger transaction in PostgreSQL.",
-    }), 403
+    """Remove one split row and its ledger row (INSERT trigger created both).
+
+    Settled splits or rows tied to a payment record cannot be removed — those
+    reflect completed money movement or reconciliation.
+    """
+    current_user_id = int(get_jwt_identity())
+
+    if not GroupMember.query.filter_by(group_id=group_id, user_id=current_user_id).first():
+        return jsonify({"error": "Access denied"}), 403
+
+    expense = ExpenseSplitGroup.query.filter_by(expense_id=expense_id, group_id=group_id).first()
+    if not expense:
+        return jsonify({"error": "Expense not found"}), 404
+
+    actor = User.query.get(current_user_id)
+    if expense.paid_by != current_user_id and (actor is None or actor.role != 'ADMIN'):
+        return jsonify({"error": "Only the member who paid (recorded the expense) can delete it."}), 403
+
+    if expense.is_settled:
+        return jsonify({"error": "Cannot delete a settled expense split."}), 400
+
+    if expense.payment_id is not None:
+        return jsonify({"error": "Cannot delete an expense split linked to a payment."}), 400
+
+    # Ledger row is keyed by EXPENSE.reference_id = expense_id (see create_transaction_for_expense).
+    # Remove it before deleting the split so payment-linked TRANSACTION rows stay untouched.
+    Transaction.query.filter_by(transaction_type='EXPENSE', reference_id=expense_id).delete(
+        synchronize_session=False
+    )
+    db.session.flush()
+    db.session.delete(expense)
+    db.session.commit()
+
+    return jsonify({"message": "Expense split deleted"}), 200
 
 
 @expense_bp.route('/groups/<int:group_id>/expenses/<int:expense_id>', methods=['PUT'])

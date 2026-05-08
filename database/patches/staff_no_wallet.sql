@@ -73,7 +73,9 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION update_budget_after_payment()
 RETURNS TRIGGER AS $$
 BEGIN
-    IF NEW.status = 'COMPLETED' AND NEW.category_id IS NOT NULL THEN
+    IF NEW.status = 'COMPLETED'
+       AND NEW.category_id IS NOT NULL
+       AND NEW.payment_type = 'PERSONAL' THEN
         UPDATE personal_expense_split pes
         SET amount_spent = amount_spent + NEW.amount
         FROM users u
