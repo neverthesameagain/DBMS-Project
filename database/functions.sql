@@ -201,6 +201,17 @@ END;
 $$ LANGUAGE plpgsql;
 
 
+CREATE OR REPLACE FUNCTION delete_transaction_for_expense()
+RETURNS TRIGGER AS $$
+BEGIN
+    DELETE FROM transactions
+    WHERE transaction_type = 'EXPENSE'
+      AND reference_id = OLD.expense_id;
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+
 CREATE OR REPLACE FUNCTION update_balance_after_payment()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -238,7 +249,9 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION update_budget_after_payment()
 RETURNS TRIGGER AS $$
 BEGIN
-    IF NEW.status = 'COMPLETED' AND NEW.category_id IS NOT NULL THEN
+    IF NEW.status = 'COMPLETED'
+       AND NEW.category_id IS NOT NULL
+       AND NEW.payment_type = 'PERSONAL' THEN
         UPDATE personal_expense_split pes
         SET amount_spent = amount_spent + NEW.amount
         FROM users u

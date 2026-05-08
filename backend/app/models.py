@@ -198,12 +198,14 @@ class Payment(db.Model):
             'from_name':    f'{self.sender.first_name} {self.sender.last_name}' if self.sender else '',
             'to_user_id':   self.to_user_id,
             'to_name':      f'{self.receiver.first_name} {self.receiver.last_name}' if self.receiver else '',
-            'category':     self.category.category_name if self.category else None,
+            'category': self.category.category_name if self.category else 'General',
             'amount':       float(self.amount or 0),
             'payment_type': self.payment_type,
             'status':       self.status,
             'note':         self.note,
             'created_at':   self.created_at.isoformat() if self.created_at else None,
+            # Cash desk load/unload — not interpersonal borrow/lend.
+            'is_wallet_adjustment': self.payment_type in ('BANKER_ADD', 'BANKER_REMOVE'),
         }
 
 

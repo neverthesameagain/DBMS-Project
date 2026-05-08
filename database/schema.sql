@@ -420,6 +420,21 @@ $$ LANGUAGE plpgsql;
 
 
 -- =============================================================
+-- FUNCTION: delete_transaction_for_expense
+-- Removes the ledger row when a split is deleted (mirrors INSERT trigger).
+-- =============================================================
+CREATE OR REPLACE FUNCTION delete_transaction_for_expense()
+RETURNS TRIGGER AS $$
+BEGIN
+    DELETE FROM transactions
+    WHERE transaction_type = 'EXPENSE'
+      AND reference_id = OLD.expense_id;
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- =============================================================
 -- FUNCTION: update_balance_after_payment
 -- Keeps wallet balances in DB instead of backend code.
 -- =============================================================
@@ -464,7 +479,11 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION update_budget_after_payment()
 RETURNS TRIGGER AS $$
 BEGIN
-    IF NEW.status = 'COMPLETED' AND NEW.category_id IS NOT NULL THEN
+    -- Only PERSONAL outflows affect category budgets. GROUP settlements repay splits;
+    -- BANKER_* is infrastructure / wallet plumbing.
+    IF NEW.status = 'COMPLETED'
+       AND NEW.category_id IS NOT NULL
+       AND NEW.payment_type = 'PERSONAL' THEN
         UPDATE personal_expense_split pes
         SET amount_spent = amount_spent + NEW.amount
         FROM users u
@@ -491,6 +510,13 @@ CREATE TRIGGER trg_expense_transaction
     AFTER INSERT ON expense_split_group
     FOR EACH ROW
     EXECUTE FUNCTION create_transaction_for_expense();
+
+
+DROP TRIGGER IF EXISTS trg_expense_delete_ledger ON expense_split_group;
+CREATE TRIGGER trg_expense_delete_ledger
+    BEFORE DELETE ON expense_split_group
+    FOR EACH ROW
+    EXECUTE FUNCTION delete_transaction_for_expense();
 
 
 DROP TRIGGER IF EXISTS trg_update_balance_after_payment ON payment;
@@ -524,7 +550,8 @@ SELECT
     'PAYMENT' AS entry_type,
     p.note AS description
 FROM payment p
-JOIN transactions t ON t.transaction_type = 'PAYMENT' AND t.reference_id = p.payment_id
+JOIN transactions t ON t.transaction_id = p.transaction_id
+    AND t.transaction_type = 'PAYMENT'
 UNION ALL
 SELECT
     t.transaction_id,
@@ -565,12 +592,23 @@ SELECT
     u.user_id,
     u.first_name,
     u.last_name,
-    COALESCE(SUM(CASE WHEN esg.paid_by = u.user_id THEN esg.amount ELSE 0 END), 0) AS total_paid,
-    COALESCE(SUM(CASE WHEN esg.paid_for = u.user_id AND esg.paid_by <> u.user_id AND esg.is_settled = FALSE THEN esg.amount ELSE 0 END), 0) AS still_owes,
-    COALESCE(SUM(CASE WHEN esg.paid_by = u.user_id AND esg.paid_for <> u.user_id AND esg.is_settled = FALSE THEN esg.amount ELSE 0 END), 0) AS is_owed,
-    COALESCE(SUM(CASE WHEN esg.paid_by = u.user_id THEN esg.amount ELSE 0 END), 0)
-      - COALESCE(SUM(CASE WHEN esg.paid_for = u.user_id AND esg.paid_by <> u.user_id AND esg.is_settled = FALSE THEN esg.amount ELSE 0 END), 0)
-      + COALESCE(SUM(CASE WHEN esg.paid_by = u.user_id AND esg.paid_for <> u.user_id AND esg.is_settled = FALSE THEN esg.amount ELSE 0 END), 0) AS net_balance
+    COALESCE(SUM(CASE
+        WHEN esg.paid_by = u.user_id AND esg.paid_for <> u.user_id AND esg.is_settled = FALSE
+        THEN esg.amount ELSE 0 END), 0) AS total_paid,
+    COALESCE(SUM(CASE
+        WHEN esg.paid_for = u.user_id AND esg.paid_by <> u.user_id AND esg.is_settled = FALSE
+        THEN esg.amount ELSE 0 END), 0) AS still_owes,
+    COALESCE(SUM(CASE
+        WHEN esg.paid_by = u.user_id AND esg.paid_for <> u.user_id AND esg.is_settled = FALSE
+        THEN esg.amount ELSE 0 END), 0) AS is_owed,
+    COALESCE(SUM(CASE
+        WHEN esg.paid_for = u.user_id THEN esg.amount ELSE 0 END), 0) AS expense_share_total,
+    COALESCE(SUM(CASE
+        WHEN esg.paid_by = u.user_id AND esg.paid_for <> u.user_id AND esg.is_settled = FALSE
+        THEN esg.amount ELSE 0 END), 0)
+      - COALESCE(SUM(CASE
+        WHEN esg.paid_for = u.user_id AND esg.paid_by <> u.user_id AND esg.is_settled = FALSE
+        THEN esg.amount ELSE 0 END), 0) AS net_balance
 FROM group_members gm
 JOIN users u ON u.user_id = gm.user_id
 LEFT JOIN expense_split_group esg ON esg.group_id = gm.group_id AND (esg.paid_by = u.user_id OR esg.paid_for = u.user_id)

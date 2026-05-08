@@ -125,6 +125,10 @@ const Payments = () => {
 
     // Check budget when category changes
     useEffect(() => {
+        if (paymentType === 'GROUP' && groupActionMode === 'SETTLE') {
+            setBudgetWarning(null);
+            return;
+        }
         if (category && amount) {
             const budget = budgets.find(b => b.category_name === category);
             if (budget) {
@@ -143,7 +147,7 @@ const Payments = () => {
             }
         }
         setBudgetWarning(null);
-    }, [category, amount, budgets]);
+    }, [category, amount, budgets, paymentType, groupActionMode]);
 
     const handleSelectGroupDebt = (bal) => {
         // Find the member's email from the group members
@@ -192,16 +196,21 @@ const Payments = () => {
 
         setLoading(true);
         try {
-            await api.post('/api/payments', {
+            const isGroupSettlement = paymentType === 'GROUP' && groupActionMode === 'SETTLE';
+            const apiPaymentType = isGroupSettlement ? 'GROUP' : 'PERSONAL';
+            const apiGroupId = isGroupSettlement ? selectedGroupId : null;
+
+            const payRes = await api.post('/api/payments', {
                 recipient_type: recipientType,
                 recipient_identifier: recipientIdentifier.trim(),
                 amount: Math.round(parsedAmount * 100) / 100,
                 note,
                 category: category || null,
                 upi_ref: senderUpi || null,
-                payment_type: paymentType,
-                group_id: paymentType === 'GROUP' ? selectedGroupId : null,
+                payment_type: apiPaymentType,
+                group_id: apiGroupId,
             });
+            const payData = payRes.data || {};
             // If "Pay & Split", also create a group expense
             if (paymentType === 'GROUP' && groupActionMode === 'EXPENSE' && selectedGroupId) {
                 try {
@@ -222,7 +231,17 @@ const Payments = () => {
                 }
             }
 
-            alert('Payment sent successfully!');
+            let okMsg = 'Payment sent successfully!';
+            const settled = parseInt(payData.settled_count, 10) || 0;
+            if (settled > 0) {
+                okMsg += ` Closed ${settled} outstanding split line(s) with this person.`;
+            } else if (payData.still_owe_this_recipient != null) {
+                const rest = parseFloat(payData.still_owe_this_recipient) || 0;
+                if (rest > 0) {
+                    okMsg += ` Wallet updated — you still owe them ₹${rest.toFixed(2)} across groups until you send at least that in one payment.`;
+                }
+            }
+            alert(okMsg);
             setAmount('');
             setRecipientIdentifier('');
             setNote('');
@@ -230,10 +249,13 @@ const Payments = () => {
             setBudgetWarning(null);
             fetchHistory();
             fetchBudgets();
-            // Refresh group balances if it was a group payment
             if (paymentType === 'GROUP' && selectedGroupId) {
-                const res = await api.get(`/api/groups/${selectedGroupId}/balances`);
-                setGroupBalances(res.data);
+                try {
+                    const res = await api.get(`/api/groups/${selectedGroupId}/balances`);
+                    setGroupBalances(res.data);
+                } catch (e) {
+                    console.error('Failed to refresh group balances', e);
+                }
             }
         } catch (err) {
             alert('Payment Failed: ' + (err.response?.data?.error || err.message));
@@ -323,8 +345,12 @@ const Payments = () => {
                         <div>
                             <div className="flex bg-gray-50 p-1 rounded-xl mb-3">
                                 <button type="button" onClick={() => { setPaymentType('PERSONAL'); setSelectedGroupId(''); }} className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${paymentType === 'PERSONAL' ? 'bg-white shadow-sm text-gray-900 border border-gray-100' : 'text-gray-500 hover:text-gray-700'}`}>Personal Transfer</button>
-                                <button type="button" onClick={() => setPaymentType('GROUP')} className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${paymentType === 'GROUP' ? 'bg-white shadow-sm text-gray-900 border border-gray-100' : 'text-gray-500 hover:text-gray-700'}`}>Paying for someone else</button>
+                                <button type="button" onClick={() => setPaymentType('GROUP')} className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${paymentType === 'GROUP' ? 'bg-white shadow-sm text-gray-900 border border-gray-100' : 'text-gray-500 hover:text-gray-700'}`}>Group-related</button>
                             </div>
+                            <p className="text-[0.7rem] text-gray-500 text-center mb-3 px-2 leading-relaxed">
+                                Use <span className="font-semibold text-gray-700">Group-related → Settling existing</span> to close recorded splits.
+                                Use <span className="font-semibold text-gray-700">Group-related → Group payment</span> to reimburse someone and record a new expense (money moves as a personal transfer).
+                            </p>
                             
                             {paymentType === 'GROUP' && (
                                 <>
@@ -481,27 +507,46 @@ const Payments = () => {
                     <p className="text-gray-500 text-sm italic text-center py-4">No payments yet.</p>
                 ) : (
                     <div className="space-y-3 max-h-72 overflow-y-auto">
-                        {history.map(p => (
+                        {history.map(p => {
+                            const walletAdj = p.is_wallet_adjustment === true || p.payment_type === 'BANKER_ADD' || p.payment_type === 'BANKER_REMOVE';
+                            const peerSent = !walletAdj && p.direction === 'sent';
+                            const titleLine = walletAdj
+                                ? (p.payment_type === 'BANKER_ADD'
+                                    ? 'Cash added to your wallet (bank)'
+                                    : 'Cash withdrawn from your wallet (bank)')
+                                : peerSent
+                                    ? `${p.payment_type === 'GROUP' ? 'Settlement to ' : 'To '}${p.to_name}`
+                                    : `From ${p.from_name}`;
+                            const noteLine = walletAdj
+                                ? (p.note || 'Not a loan — adjusts wallet balance only')
+                                : (p.note || (p.payment_type === 'GROUP' ? 'Group settlement' : '—'));
+                            return (
                             <div key={p.payment_id} className="flex justify-between items-center py-3 border-b border-gray-50 last:border-0 group">
                                 <div className="flex items-center gap-3">
-                                    <div className={`p-2 rounded-full ${p.direction === 'sent' ? 'bg-red-50 text-red-500' : 'bg-green-50 text-green-500'}`}>
-                                        {p.direction === 'sent' ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownLeft className="w-4 h-4" />}
+                                    <div className={`p-2 rounded-full ${walletAdj ? (p.payment_type === 'BANKER_ADD' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-700') : peerSent ? 'bg-red-50 text-red-500' : 'bg-green-50 text-green-500'}`}>
+                                        {walletAdj
+                                            ? (p.payment_type === 'BANKER_ADD'
+                                                ? <ArrowDownLeft className="w-4 h-4" />
+                                                : <ArrowUpRight className="w-4 h-4" />)
+                                            : peerSent ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownLeft className="w-4 h-4" />}
                                     </div>
                                     <div>
                                         <p className="font-medium text-gray-900 group-hover:text-blue-600 transition-colors">
-                                            {p.direction === 'sent' ? `To ${p.to_name}` : `From ${p.from_name}`}
+                                            {titleLine}
                                         </p>
-                                        <p className="text-xs text-gray-400 mt-0.5">{p.note || '—'}</p>
+                                        <p className="text-xs text-gray-400 mt-0.5">{noteLine}</p>
                                     </div>
                                 </div>
                                 <div className="text-right">
-                                    <p className={`font-medium ${p.direction === 'sent' ? 'text-gray-900' : 'text-green-600'}`}>
-                                        {p.direction === 'sent' ? '-' : '+'}₹{(parseFloat(p.amount) || 0).toFixed(2)}
+                                    <p className={`font-medium ${walletAdj ? 'text-slate-800' : peerSent ? 'text-gray-900' : 'text-green-600'}`}>
+                                        {walletAdj
+                                            ? (p.payment_type === 'BANKER_ADD' ? '+' : '−')
+                                            : peerSent ? '−' : '+'}₹{(parseFloat(p.amount) || 0).toFixed(2)}
                                     </p>
                                     <p className="text-[0.65rem] font-bold text-gray-400 uppercase tracking-wider mt-1">{p.created_at ? new Date(p.created_at).toLocaleDateString() : ''}</p>
                                 </div>
                             </div>
-                        ))}
+                        );})}
                     </div>
                 )}
             </div>
